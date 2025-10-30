@@ -1,0 +1,47 @@
+[project]
+name = "freelance-trends-agent"
+version = "0.1.0"
+description = "AI agent tracking freelancing jobs and emerging trends with A2A protocol"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[all]>=0.115.12",
+    "pydantic>=2.10.0",
+    "pydantic-ai>=0.4.2",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.1.0",
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.13.0",
+    "redis[hiredis]>=6.0.0",
+    "pandas>=2.2.0",
+    "scikit-learn>=1.5.0",
+    "apscheduler>=3.10.0",
+    "psycopg2-binary>=2.9.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "black>=24.0.0",
+    "ruff>=0.8.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["src/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py313']
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"

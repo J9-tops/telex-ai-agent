@@ -1,0 +1,17 @@
+fastapi[all]
+pydantic
+pydantic-ai
+httpx
+python-dotenv
+sqlalchemy
+alembic
+redis[hiredis]
+pandas
+scikit-learn
+apscheduler
+psycopg2-binary
+pytest
+pytest-asyncio
+pytest-cov
+black
+ruff
