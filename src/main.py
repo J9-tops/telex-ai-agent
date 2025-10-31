@@ -11,7 +11,7 @@ from src.models.a2a import JSONRPCRequest, JSONRPCResponse
 from src.services.freelance_agent import FreelanceAgent
 from src.services.job_scraper import JobScraper, run_scheduled_scraping
 from src.db.session import init_db, get_db
-from src.routers import jobs, trends, admin
+from src.routers import job, trends, admin, ai
 from sqlalchemy.orm import Session
 
 # Load environment variables
@@ -88,9 +88,10 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(jobs.router)
+app.include_router(job.router)
 app.include_router(trends.router)
 app.include_router(admin.router)
+app.include_router(ai.router)
 
 
 @app.post("/a2a/freelance")

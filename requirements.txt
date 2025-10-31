@@ -4,6 +4,7 @@ pydantic-ai
 httpx
 python-dotenv
 sqlalchemy
+sqlalchemy-utils
 alembic
 redis[hiredis]
 pandas
@@ -15,3 +16,4 @@ pytest-asyncio
 pytest-cov
 black
 ruff
+google-genai
