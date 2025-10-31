@@ -58,7 +58,6 @@ class JobRepository:
             q = q.filter(Job.date_posted >= query.date_from)
 
         if query.skills:
-            # Filter jobs that have any of the specified skills in tags
             for skill in query.skills:
                 q = q.filter(Job.tags.contains([skill]))
 

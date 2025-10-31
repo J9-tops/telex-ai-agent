@@ -4,13 +4,14 @@ from sqlalchemy.pool import StaticPool
 from contextlib import contextmanager
 import os
 from dotenv import load_dotenv
+from sqlalchemy_utils import database_exists, create_database
+from typing import Generator
 
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./freelance_trends.db")
 DATABASE_ECHO = os.getenv("DATABASE_ECHO", "False").lower() == "true"
 
-# Create engine
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(
         DATABASE_URL,
@@ -27,11 +28,10 @@ else:
         echo=DATABASE_ECHO,
     )
 
-# Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def get_db() -> Session:
+def get_db() -> Generator[Session, None, None]:
     """Dependency for FastAPI routes"""
     db = SessionLocal()
     try:
@@ -55,7 +55,10 @@ def get_db_context():
 
 
 def init_db():
-    """Initialize database tables"""
+    """Initialize database and tables"""
     from src.models.job import Base
+
+    if not database_exists(engine.url):
+        create_database(engine.url)
 
     Base.metadata.create_all(bind=engine)

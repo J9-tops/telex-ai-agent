@@ -1,5 +1,7 @@
 """API route handlers"""
 
-from src.routers import jobs, trends, admin
+# from .admin import admin
+# from .job import jobs
+# from .trends import trends
 
-__all__ = ["jobs", "trends", "admin"]
+# __all__ = ["jobs", "trends", "admin"]
