@@ -11,6 +11,8 @@ from src.schemas.job import (
     StatsResponse,
 )
 
+from src.schemas.ai import CompareSkillsRequest, LearningPathRequest, QuestionRequest
+
 __all__ = [
     "JobSchema",
     "SkillSchema",
@@ -20,4 +22,7 @@ __all__ = [
     "JobSearchQuery",
     "TrendQuery",
     "StatsResponse",
+    "QuestionRequest",
+    "CompareSkillsRequest",
+    "LearningPathRequest",
 ]

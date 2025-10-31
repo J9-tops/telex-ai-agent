@@ -61,7 +61,6 @@ async def get_stats(db: Session = Depends(get_db)):
     jobs_24h = JobRepository.get_jobs_count_by_period(db, hours=24)
     jobs_7d = JobRepository.get_jobs_count_by_period(db, hours=24 * 7)
 
-    # Get most active company
     from sqlalchemy import func
     from src.models.job import Job
 
@@ -74,7 +73,6 @@ async def get_stats(db: Session = Depends(get_db)):
 
     most_active_company = company_stats[0] if company_stats else None
 
-    # Get most demanded skill
     top_skill = SkillRepository.get_top_skills(db, limit=1)
     most_demanded_skill = top_skill[0].name if top_skill else None
 
