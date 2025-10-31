@@ -31,7 +31,17 @@ REDIS_URL=redis://localhost:6379/0
 REMOTEOK_API_URL=https://remoteok.com/api
 JOB_FETCH_INTERVAL_MINUTES=30
 LOG_LEVEL=INFO
+
+# AI Configuration (Google Gemini)
+AI_PROVIDER=google
+API_KEY=your-gemini-api-key-here
+API_NAME=telex-google-gemini
 ```
+
+**Get your Gemini API Key:**
+1. Visit https://ai.google.dev/
+2. Click "Get API key"
+3. Copy your key to the `.env` file
 
 ### 3. Initialize Database
 
