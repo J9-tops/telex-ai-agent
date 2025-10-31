@@ -16,6 +16,7 @@ from src.db.session import get_db_context
 from src.db.repository import JobRepository, SkillRepository, TrendRepository
 from src.services.trend_analyzer import TrendAnalyzer
 from src.services.job_scraper import JobScraper
+from src.services.ai import AIService
 from src.schemas.job import JobSearchQuery
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,8 @@ class FreelanceAgent:
     def __init__(self, scraper: JobScraper):
         self.scraper = scraper
         self.analyzer = TrendAnalyzer()
-        self.conversations = {}  # Store conversation context
+        self.ai_service = AIService()
+        self.conversations = {}
 
     async def process_messages(
         self,
@@ -38,38 +40,32 @@ class FreelanceAgent:
     ) -> TaskResult:
         """Process incoming A2A messages and generate response"""
 
-        # Generate IDs if not provided
         context_id = context_id or str(uuid4())
         task_id = task_id or str(uuid4())
 
-        # Extract user message
         user_message = messages[-1] if messages else None
         if not user_message:
             return self._create_error_result(
                 context_id, task_id, "No message provided", messages
             )
 
-        # Extract text from message
         user_text = ""
         for part in user_message.parts:
             if part.kind == "text":
                 user_text = part.text.strip().lower()
                 break
 
-        # Parse intent and execute action
         try:
             response_text, artifacts, state = await self._handle_intent(
                 user_text, context_id
             )
 
-            # Create response message
             response_message = A2AMessage(
                 role="agent",
                 parts=[MessagePart(kind="text", text=response_text)],
                 taskId=task_id,
             )
 
-            # Build history
             history = messages + [response_message]
 
             return TaskResult(
@@ -89,47 +85,51 @@ class FreelanceAgent:
     ) -> tuple[str, List[Artifact], str]:
         """Parse user intent and execute appropriate action"""
 
-        # Intent: Get trending skills
         if any(word in user_text for word in ["trending", "popular", "top"]) and any(
             word in user_text for word in ["skill", "technology", "tech"]
         ):
             return await self._get_trending_skills()
 
-        # Intent: Get trending roles
         elif any(word in user_text for word in ["trending", "popular", "top"]) and any(
             word in user_text for word in ["role", "position", "job"]
         ):
             return await self._get_trending_roles()
 
-        # Intent: Search jobs
         elif any(
             word in user_text for word in ["search", "find", "show", "list"]
         ) and any(word in user_text for word in ["job", "position", "opening"]):
             return await self._search_jobs(user_text)
 
-        # Intent: Get statistics
         elif any(
             word in user_text for word in ["stats", "statistics", "overview", "summary"]
         ):
             return await self._get_statistics()
 
-        # Intent: Analyze trends
         elif any(word in user_text for word in ["analyze", "analysis", "insight"]):
             return await self._run_analysis()
 
-        # Intent: Scrape jobs
         elif any(
             word in user_text for word in ["scrape", "fetch", "update", "refresh"]
         ):
             return await self._scrape_jobs()
 
-        # Intent: Get latest analysis
         elif any(word in user_text for word in ["latest", "recent"]) and any(
             word in user_text for word in ["analysis", "trend", "report"]
         ):
             return await self._get_latest_analysis()
 
-        # Default: Help
+        elif "compare" in user_text or "vs" in user_text or "versus" in user_text:
+            return await self._compare_skills(user_text)
+
+        elif any(word in user_text for word in ["learn", "learning", "study", "path"]):
+            return await self._get_learning_path(user_text)
+
+        elif any(
+            word in user_text
+            for word in ["what", "how", "why", "when", "should", "can", "?"]
+        ):
+            return await self._answer_question(user_text, context_id)
+
         else:
             return self._get_help()
 
@@ -146,12 +146,10 @@ class FreelanceAgent:
                     "completed",
                 )
 
-            # Format response
             response = "**Top Trending Skills (Last 30 Days)**\n\n"
             for i, skill in enumerate(trending_skills[:10], 1):
                 response += f"{i}. **{skill.skill_name.title()}**: {skill.current_mentions} mentions ({skill.growth_percentage})\n"
 
-            # Create artifact
             skills_data = [skill.model_dump() for skill in trending_skills]
             artifact = Artifact(
                 name="trending_skills",
@@ -188,7 +186,6 @@ class FreelanceAgent:
     async def _search_jobs(self, query_text: str) -> tuple[str, List[Artifact], str]:
         """Search for jobs"""
         with get_db_context() as db:
-            # Simple query - get recent jobs
             search_query = JobSearchQuery(limit=20)
             jobs = JobRepository.search_jobs(db, search_query)
 
@@ -253,16 +250,17 @@ class FreelanceAgent:
             return response, [artifact], "completed"
 
     async def _run_analysis(self) -> tuple[str, List[Artifact], str]:
-        """Run trend analysis"""
+        """Run trend analysis with AI insights"""
         result = await self.analyzer.run_full_analysis()
 
-        response = "**Trend Analysis Completed**\n\n"
+        response = "**Trend Analysis Completed with AI Insights**\n\n"
         response += f"✅ Analyzed {result['total_jobs_analyzed']} jobs\n"
         response += f"📈 Found {result['trending_skills_count']} trending skills\n"
-        response += f"💼 Found {result['trending_roles_count']} trending roles\n"
-        response += (
-            "\nUse 'show trending skills' or 'show trending roles' to see details."
-        )
+        response += f"💼 Found {result['trending_roles_count']} trending roles\n\n"
+
+        if result.get("ai_insights"):
+            response += "**🤖 AI Insights:**\n\n"
+            response += result["ai_insights"]
 
         artifact = Artifact(
             name="analysis_result", parts=[MessagePart(kind="data", data=result)]
@@ -286,7 +284,7 @@ class FreelanceAgent:
         return response, [artifact], "completed"
 
     async def _get_latest_analysis(self) -> tuple[str, List[Artifact], str]:
-        """Get latest trend analysis"""
+        """Get latest trend analysis with AI insights"""
         with get_db_context() as db:
             analysis = TrendRepository.get_latest_analysis(db)
 
@@ -312,6 +310,9 @@ class FreelanceAgent:
                         f"• {skill['skill_name']}: {skill['growth_percentage']}\n"
                     )
 
+            if analysis.ai_insights:
+                response += f"\n**🤖 AI Insights:**\n\n{analysis.ai_insights}"
+
             artifact = Artifact(
                 name="latest_analysis",
                 parts=[
@@ -322,6 +323,7 @@ class FreelanceAgent:
                             "trending_skills": analysis.trending_skills,
                             "trending_roles": analysis.trending_roles,
                             "skill_clusters": analysis.skill_clusters,
+                            "ai_insights": analysis.ai_insights,
                         },
                     )
                 ],
@@ -348,15 +350,138 @@ I can help you track and analyze freelance job trends! Here's what I can do:
 • "search jobs" - Find recent job postings
 • "find jobs" - Same as above
 
+🤖 **AI-Powered Features**
+• "compare Python vs JavaScript" - Compare two skills
+• "learn React" - Get a learning path for a skill
+• Ask any question about the job market
+
 ⚙️ **Actions**
 • "scrape jobs" - Fetch latest jobs from RemoteOK
-• "analyze trends" - Run comprehensive trend analysis
+• "analyze trends" - Run comprehensive AI-powered trend analysis
 
 Just ask me naturally and I'll help you discover what's hot in the freelance market!
 """
 
         artifact = Artifact(
             name="help", parts=[MessagePart(kind="text", text=response)]
+        )
+
+        return response, [artifact], "completed"
+
+    async def _compare_skills(self, user_text: str) -> tuple[str, List[Artifact], str]:
+        """Compare two skills using AI"""
+        words = (
+            user_text.lower()
+            .replace("compare", "")
+            .replace("vs", " ")
+            .replace("versus", " ")
+            .split()
+        )
+        potential_skills = [
+            w.strip()
+            for w in words
+            if len(w) > 2 and w not in ["and", "the", "or", "with"]
+        ]
+
+        if len(potential_skills) < 2:
+            return (
+                "Please specify two skills to compare (e.g., 'compare Python vs JavaScript')",
+                [],
+                "completed",
+            )
+
+        skill1, skill2 = potential_skills[0], potential_skills[1]
+
+        with get_db_context() as db:
+            all_skills = SkillRepository.get_all_skills(db)
+            skill1_data = next(
+                (s for s in all_skills if skill1.lower() in s.name.lower()), None
+            )
+            skill2_data = next(
+                (s for s in all_skills if skill2.lower() in s.name.lower()), None
+            )
+
+            market_data = {
+                "skill1_mentions": skill1_data.total_mentions if skill1_data else 0,
+                "skill2_mentions": skill2_data.total_mentions if skill2_data else 0,
+                "skill1_growth": "N/A",
+                "skill2_growth": "N/A",
+            }
+
+        comparison = await self.ai_service.compare_skills(skill1, skill2, market_data)
+
+        response = f"**Comparing {skill1.title()} vs {skill2.title()}**\n\n{comparison}"
+
+        artifact = Artifact(
+            name="skill_comparison", parts=[MessagePart(kind="text", text=comparison)]
+        )
+
+        return response, [artifact], "completed"
+
+    async def _get_learning_path(
+        self, user_text: str
+    ) -> tuple[str, List[Artifact], str]:
+        """Generate learning path for a skill"""
+        words = (
+            user_text.lower()
+            .replace("learn", "")
+            .replace("learning", "")
+            .replace("path", "")
+            .split()
+        )
+        target_skill = " ".join(w for w in words if len(w) > 2)[:50]
+
+        if not target_skill:
+            return (
+                "Please specify a skill you want to learn (e.g., 'learn React')",
+                [],
+                "completed",
+            )
+
+        current_skills = []
+
+        learning_path = await self.ai_service.generate_skill_learning_path(
+            target_skill=target_skill, current_skills=current_skills
+        )
+
+        response = f"**Learning Path for {target_skill.title()}**\n\n{learning_path}"
+
+        artifact = Artifact(
+            name="learning_path", parts=[MessagePart(kind="text", text=learning_path)]
+        )
+
+        return response, [artifact], "completed"
+
+    async def _answer_question(
+        self, user_text: str, context_id: str
+    ) -> tuple[str, List[Artifact], str]:
+        """Answer user question using AI"""
+        with get_db_context() as db:
+            total_jobs = JobRepository.get_total_jobs(db)
+            recent_jobs = JobRepository.get_jobs_count_by_period(db, hours=24 * 7)
+            top_skills = [
+                skill.name for skill in SkillRepository.get_top_skills(db, limit=5)
+            ]
+
+            from sqlalchemy import func
+            from src.models.job import Job
+
+            total_companies = db.query(func.count(func.distinct(Job.company))).scalar()
+
+            context_data = {
+                "total_jobs": total_jobs,
+                "recent_jobs": recent_jobs,
+                "top_skills": top_skills,
+                "total_companies": total_companies,
+                "additional_context": "Data from RemoteOK API, updated every 30 minutes",
+            }
+
+        answer = await self.ai_service.answer_question(user_text, context_data)
+
+        response = f"**Answer:**\n\n{answer}"
+
+        artifact = Artifact(
+            name="ai_answer", parts=[MessagePart(kind="text", text=answer)]
         )
 
         return response, [artifact], "completed"

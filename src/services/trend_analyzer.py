@@ -24,10 +24,8 @@ class TrendAnalyzer:
         cutoff_date = datetime.utcnow() - timedelta(days=self.window_days)
         previous_cutoff = cutoff_date - timedelta(days=self.window_days)
 
-        # Get jobs from current period
         current_jobs = db.query(Job).filter(Job.date_posted >= cutoff_date).all()
 
-        # Get jobs from previous period
         previous_jobs = (
             db.query(Job)
             .filter(Job.date_posted >= previous_cutoff)
@@ -35,7 +33,6 @@ class TrendAnalyzer:
             .all()
         )
 
-        # Count skill mentions
         current_skills = Counter()
         previous_skills = Counter()
 
@@ -49,12 +46,10 @@ class TrendAnalyzer:
                 for tag in job.tags:
                     previous_skills[tag.lower()] += 1
 
-        # Calculate trends
         trending_skills = []
         for skill, current_count in current_skills.most_common(50):
             previous_count = previous_skills.get(skill, 0)
 
-            # Avoid division by zero
             if previous_count == 0:
                 growth_rate = float(current_count) if current_count > 5 else 0.0
             else:
@@ -70,7 +65,6 @@ class TrendAnalyzer:
                 )
             )
 
-        # Sort by growth rate
         trending_skills.sort(key=lambda x: x.growth_rate, reverse=True)
 
         return trending_skills[:20]
@@ -80,10 +74,8 @@ class TrendAnalyzer:
         cutoff_date = datetime.utcnow() - timedelta(days=self.window_days)
         previous_cutoff = cutoff_date - timedelta(days=self.window_days)
 
-        # Get jobs from current period
         current_jobs = db.query(Job).filter(Job.date_posted >= cutoff_date).all()
 
-        # Get jobs from previous period
         previous_jobs = (
             db.query(Job)
             .filter(Job.date_posted >= previous_cutoff)
@@ -91,17 +83,14 @@ class TrendAnalyzer:
             .all()
         )
 
-        # Normalize and count roles
         current_roles = Counter()
         previous_roles = Counter()
         role_skills = defaultdict(Counter)
 
         for job in current_jobs:
-            # Normalize position title
             role = self._normalize_role(job.position)
             current_roles[role] += 1
 
-            # Track skills for this role
             if job.tags:
                 for tag in job.tags:
                     role_skills[role][tag.lower()] += 1
@@ -110,7 +99,6 @@ class TrendAnalyzer:
             role = self._normalize_role(job.position)
             previous_roles[role] += 1
 
-        # Calculate trends
         trending_roles = []
         for role, current_count in current_roles.most_common(20):
             previous_count = previous_roles.get(role, 0)
@@ -120,7 +108,6 @@ class TrendAnalyzer:
             else:
                 growth_rate = ((current_count - previous_count) / previous_count) * 100
 
-            # Get top skills for this role
             top_skills = [skill for skill, _ in role_skills[role].most_common(5)]
 
             trending_roles.append(
@@ -132,7 +119,6 @@ class TrendAnalyzer:
                 )
             )
 
-        # Sort by job count
         trending_roles.sort(key=lambda x: x.job_count, reverse=True)
 
         return trending_roles[:15]
@@ -144,7 +130,6 @@ class TrendAnalyzer:
 
         position = position.lower().strip()
 
-        # Common role mappings
         role_keywords = {
             "developer": ["developer", "dev ", "engineer", "programmer"],
             "designer": ["designer", "design"],
@@ -174,23 +159,19 @@ class TrendAnalyzer:
 
         jobs = db.query(Job).filter(Job.date_posted >= cutoff_date).all()
 
-        # Build co-occurrence matrix
         skill_pairs = defaultdict(int)
 
         for job in jobs:
             if not job.tags or len(job.tags) < 2:
                 continue
 
-            # Normalize tags
             tags = [tag.lower() for tag in job.tags]
 
-            # Count pairs
             for i in range(len(tags)):
                 for j in range(i + 1, len(tags)):
                     pair = tuple(sorted([tags[i], tags[j]]))
                     skill_pairs[pair] += 1
 
-        # Group skills by common associations
         clusters = defaultdict(set)
         main_skills = [
             "python",
@@ -205,14 +186,13 @@ class TrendAnalyzer:
         for main_skill in main_skills:
             related = []
             for (skill1, skill2), count in skill_pairs.items():
-                if count < 5:  # Minimum threshold
+                if count < 5:
                     continue
                 if skill1 == main_skill:
                     related.append((skill2, count))
                 elif skill2 == main_skill:
                     related.append((skill1, count))
 
-            # Get top related skills
             related.sort(key=lambda x: x[1], reverse=True)
             clusters[main_skill] = [skill for skill, _ in related[:5]]
 
@@ -223,18 +203,15 @@ class TrendAnalyzer:
         logger.info("Starting trend analysis...")
 
         with get_db_context() as db:
-            # Analyze trends
             trending_skills = self.analyze_skill_trends(db)
             trending_roles = self.analyze_role_trends(db)
             skill_clusters = self.identify_skill_clusters(db)
 
-            # Get statistics
             total_jobs = JobRepository.get_total_jobs(db)
             recent_jobs = JobRepository.get_jobs_count_by_period(
                 db, hours=24 * self.window_days
             )
 
-            # Store analysis
             analysis_data = {
                 "analysis_window_days": self.window_days,
                 "trending_skills": [skill.model_dump() for skill in trending_skills],

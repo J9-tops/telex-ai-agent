@@ -32,9 +32,7 @@ class JobScraper:
 
                 data = response.json()
 
-                # RemoteOK API returns an array, first element is metadata
                 if isinstance(data, list) and len(data) > 0:
-                    # Skip first element (it's metadata), rest are jobs
                     jobs = (
                         data[1:]
                         if isinstance(data[0], dict) and "api" in data[0]
@@ -55,12 +53,10 @@ class JobScraper:
     def parse_job(self, raw_job: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Parse raw job data into our schema"""
         try:
-            # Extract job ID - RemoteOK uses 'id' field
             job_id = str(raw_job.get("id", ""))
             if not job_id:
                 return None
 
-            # Parse date - RemoteOK uses 'date' field (ISO format or timestamp)
             date_posted = raw_job.get("date")
             if isinstance(date_posted, str):
                 try:
@@ -74,14 +70,12 @@ class JobScraper:
             else:
                 date_posted = datetime.utcnow()
 
-            # Extract tags/skills
             tags = raw_job.get("tags", [])
             if isinstance(tags, str):
                 tags = [t.strip() for t in tags.split(",")]
             elif not isinstance(tags, list):
                 tags = []
 
-            # Extract salary information
             salary_min = raw_job.get("salary_min")
             salary_max = raw_job.get("salary_max")
 
@@ -98,7 +92,7 @@ class JobScraper:
                 "salary_min": int(salary_min) if salary_min else None,
                 "salary_max": int(salary_max) if salary_max else None,
                 "date_posted": date_posted,
-                "remote_allowed": True,  # RemoteOK is all remote jobs
+                "remote_allowed": True,
                 "apply_url": raw_job.get("apply_url"),
                 "raw_data": raw_job,
             }
@@ -129,17 +123,14 @@ class JobScraper:
                 if not parsed_job:
                     continue
 
-                # Check if job already exists
                 existing = JobRepository.get_job_by_id(db, parsed_job["id"])
                 if existing:
                     continue
 
-                # Create job
                 try:
                     JobRepository.create_job(db, parsed_job)
                     jobs_added += 1
 
-                    # Process skills/tags
                     for tag in parsed_job.get("tags", []):
                         if tag and tag.lower() not in skills_set:
                             SkillRepository.create_or_update_skill(
@@ -173,5 +164,4 @@ async def run_scheduled_scraping(scraper: JobScraper, interval_minutes: int = 30
         except Exception as e:
             logger.error(f"Error in scheduled scraping: {e}")
 
-        # Wait for next interval
         await asyncio.sleep(interval_minutes * 60)
