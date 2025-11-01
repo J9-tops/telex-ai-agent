@@ -98,6 +98,68 @@ Format your response as JSON."""
                 "job_category": "general",
             }
 
+    async def classify_intent(self, user_query: str) -> Dict[str, Any]:
+        """Classify the user's intent and extract relevant entities."""
+
+        prompt = f"""Classify the user's intent from the following query.
+    Extract any relevant entities like skill names or job search terms.
+
+    Available intents:
+    - get_trending_skills (e.g., "show trending skills", "top tech")
+    - get_trending_roles (e.g., "popular job roles", "trending positions")
+    - search_jobs (e.g., "find jobs in React", "show Python openings")
+    - get_statistics (e.g., "market stats", "overall summary")
+    - run_analysis (e.g., "analyze trends", "deep dive into data")
+    - scrape_jobs (e.g., "update jobs", "fetch latest listings")
+    - get_latest_analysis (e.g., "what's the newest report", "latest insights")
+    - compare_skills (e.g., "compare Java vs Go", "Python vs R")
+    - get_learning_path (e.g., "how to learn Machine Learning", "study NodeJS")
+    - answer_question (for general questions not covered by specific intents)
+    - get_help (if the query is unclear or asking for help)
+
+    User Query: f"{user_query}"
+
+    Respond in JSON format with 'intent' and 'entities'.
+    Example for "find jobs in React":
+    {{"intent": "search_jobs", "entities": {{"job_query": "React"}}}}
+    Example for "compare Python vs JavaScript":
+    {{"intent": "compare_skills", "entities": {{"skill1": "Python", "skill2": "JavaScript"}}}}
+    Example for "what are the top skills?":
+    {{"intent": "get_trending_skills", "entities": {{}}}}
+    Example for "Tell me about the market":
+    {{"intent": "answer_question", "entities": {{}}}}
+    """
+
+        try:
+            import json
+
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.1,  # Keep temperature low for classification
+                    max_output_tokens=200,
+                ),
+            )
+
+            result = response.text
+            # Ensure proper JSON parsing
+            if "```json" in result:
+                result = result.split("```json")[1].split("```")[0].strip()
+            elif "```" in result:
+                result = result.split("```")[1].split("```")[0].strip()
+
+            return json.loads(result)
+
+        except Exception as e:
+            logger.error(
+                f"Error classifying intent: {e}, Raw response: {response.text if 'response' in locals() else 'N/A'}"
+            )
+            return {
+                "intent": "answer_question",
+                "entities": {},
+            }  # Fallback to general question
+
     async def generate_skill_learning_path(
         self, target_skill: str, current_skills: List[str]
     ) -> str:

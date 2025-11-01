@@ -83,55 +83,54 @@ class FreelanceAgent:
     async def _handle_intent(
         self, user_text: str, context_id: str
     ) -> tuple[str, List[Artifact], str]:
-        """Parse user intent and execute appropriate action"""
+        """Parse user intent and execute appropriate action using LLM for classification."""
 
-        if any(word in user_text for word in ["trending", "popular", "top"]) and any(
-            word in user_text for word in ["skill", "technology", "tech"]
-        ):
+        # Use AI to classify intent and potentially extract entities
+        intent_data = await self.ai_service.classify_intent(user_text)
+        intent = intent_data.get("intent")
+        entities = intent_data.get("entities", {})
+
+        logger.info(f"Classified intent: {intent}, Entities: {entities}")
+
+        if intent == "get_trending_skills":
             return await self._get_trending_skills()
-
-        elif any(word in user_text for word in ["trending", "popular", "top"]) and any(
-            word in user_text for word in ["role", "position", "job"]
-        ):
+        elif intent == "get_trending_roles":
             return await self._get_trending_roles()
-
-        elif any(
-            word in user_text for word in ["search", "find", "show", "list"]
-        ) and any(word in user_text for word in ["job", "position", "opening"]):
-            return await self._search_jobs(user_text)
-
-        elif any(
-            word in user_text for word in ["stats", "statistics", "overview", "summary"]
-        ):
+        elif intent == "search_jobs":
+            search_query_text = entities.get(
+                "job_query", user_text
+            )  # Use extracted query or full text
+            return await self._search_jobs(search_query_text)
+        elif intent == "get_statistics":
             return await self._get_statistics()
-
-        elif any(word in user_text for word in ["analyze", "analysis", "insight"]):
+        elif intent == "run_analysis":
             return await self._run_analysis()
-
-        elif any(
-            word in user_text for word in ["scrape", "fetch", "update", "refresh"]
-        ):
+        elif intent == "scrape_jobs":
             return await self._scrape_jobs()
-
-        elif any(word in user_text for word in ["latest", "recent"]) and any(
-            word in user_text for word in ["analysis", "trend", "report"]
-        ):
+        elif intent == "get_latest_analysis":
             return await self._get_latest_analysis()
-
-        elif "compare" in user_text or "vs" in user_text or "versus" in user_text:
-            return await self._compare_skills(user_text)
-
-        elif any(word in user_text for word in ["learn", "learning", "study", "path"]):
-            return await self._get_learning_path(user_text)
-
-        elif any(
-            word in user_text
-            for word in ["what", "how", "why", "when", "should", "can", "?"]
-        ):
+        elif intent == "compare_skills":
+            skill1 = entities.get("skill1")
+            skill2 = entities.get("skill2")
+            if skill1 and skill2:
+                return await self._compare_skills(
+                    f"compare {skill1} vs {skill2}"
+                )  # Re-use existing method
+            else:
+                return "Please specify two skills to compare.", [], "completed"
+        elif intent == "get_learning_path":
+            target_skill = entities.get("target_skill")
+            if target_skill:
+                return await self._get_learning_path(
+                    f"learn {target_skill}"
+                )  # Re-use existing method
+            else:
+                return "Please specify a skill to learn.", [], "completed"
+        elif intent == "answer_question":
             return await self._answer_question(user_text, context_id)
-
-        else:
-            return self._get_help()
+        else:  # Fallback to general chat or help if intent is unclear
+            # This is where your 'chat_response' could come in handy
+            return self._get_help()  # Or a more dynamic chat response
 
     async def _get_trending_skills(self) -> tuple[str, List[Artifact], str]:
         """Get trending skills"""
