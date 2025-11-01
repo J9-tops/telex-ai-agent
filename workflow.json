@@ -10,7 +10,30 @@
     {
       "id": "freelance_trends_agent",
       "name": "Freelance Trends Agent",
-      "parameters": {},
+      "parameters": {
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": "auto",
+          "method": "execute",
+          "params": {
+            "message": {
+              "kind": "message",
+              "role": "user",
+              "parts": [
+                {
+                  "kind": "text",
+                  "text": "{{ $json.message }}"
+                }
+              ],
+              "messageId": "msg-auto"
+            }
+          }
+        }
+      },
       "position": [816, -112],
       "type": "a2a/mastra-a2a-node",
       "typeVersion": 1,
