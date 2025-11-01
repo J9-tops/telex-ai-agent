@@ -23,12 +23,12 @@
             "messages": [
               {
                 "role": "user",
-                "parts": [
-                  {
-    "kind": "data",
-    "data": { "text": "" }  
+               "parts": [
+  {
+    "kind": "text",
+    "text": "{{$input.text}}"
   }
-                ]
+]
               }
             ]
           }
