@@ -356,7 +356,7 @@ I can help you track and analyze freelance job trends! Here's what I can do:
 • Ask any question about the job market
 
 ⚙️ **Actions**
-• "scrape jobs" - Fetch latest jobs from RemoteOK
+• "scrape jobs" - Fetch latest jobs
 • "analyze trends" - Run comprehensive AI-powered trend analysis
 
 Just ask me naturally and I'll help you discover what's hot in the freelance market!
@@ -473,7 +473,7 @@ Just ask me naturally and I'll help you discover what's hot in the freelance mar
                 "recent_jobs": recent_jobs,
                 "top_skills": top_skills,
                 "total_companies": total_companies,
-                "additional_context": "Data from RemoteOK API, updated every 30 minutes",
+                "additional_context": "Data from API, updated every 30 minutes",
             }
 
         answer = await self.ai_service.answer_question(user_text, context_data)

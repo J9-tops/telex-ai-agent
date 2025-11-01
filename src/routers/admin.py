@@ -12,8 +12,8 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 async def trigger_scrape(db: Session = Depends(get_db)):
     """Manually trigger job scraping"""
     scraper = JobScraper(
-        api_url=os.getenv("REMOTEOK_API_URL", "https://remoteok.com/api"),
-        rate_limit=int(os.getenv("REMOTEOK_RATE_LIMIT", 60)),
+        api_url=os.getenv("API_URL"),
+        rate_limit=int(os.getenv("RATE_LIMIT", 60)),
     )
 
     result = await scraper.scrape_and_store()
@@ -35,6 +35,6 @@ async def get_system_status(db: Session = Depends(get_db)):
         },
         "scraper": {
             "enabled": True,
-            "interval_minutes": int(os.getenv("JOB_FETCH_INTERVAL_MINUTES", 30)),
+            "interval_minutes": int(os.getenv("JOB_FETCH_INTERVAL_MINUTES", 1440)),
         },
     }

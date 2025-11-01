@@ -75,7 +75,7 @@ async def ask_question(request: QuestionRequest, db: Session = Depends(get_db)):
         "recent_jobs": recent_jobs,
         "top_skills": top_skills,
         "total_companies": total_companies,
-        "additional_context": "Data from RemoteOK API",
+        "additional_context": "Data from API",
     }
 
     answer = await ai_service.answer_question(request.question, context_data)

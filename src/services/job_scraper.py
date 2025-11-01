@@ -7,20 +7,24 @@ from sqlalchemy.orm import Session
 
 from src.db.repository import JobRepository, SkillRepository
 from src.db.session import get_db_context
+import os
 
 logger = logging.getLogger(__name__)
 
+API_URL = os.getenv("API_URL")
+RATE_LIMIT = int(os.getenv("RATE_LIMIT", 60))
+
 
 class JobScraper:
-    """Service for scraping jobs from RemoteOK API"""
+    """Service for scraping jobs from API"""
 
-    def __init__(self, api_url: str = "https://remoteok.com/api", rate_limit: int = 60):
+    def __init__(self, api_url: str = API_URL, rate_limit: int = 60):
         self.api_url = api_url
         self.rate_limit = rate_limit
         self.last_fetch_time = None
 
     async def fetch_jobs(self) -> List[Dict[str, Any]]:
-        """Fetch jobs from RemoteOK API"""
+        """Fetch jobs from API"""
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 headers = {
@@ -38,7 +42,7 @@ class JobScraper:
                         if isinstance(data[0], dict) and "api" in data[0]
                         else data
                     )
-                    logger.info(f"Fetched {len(jobs)} jobs from RemoteOK API")
+                    logger.info(f"Fetched {len(jobs)} jobs from API")
                     return jobs
 
                 return []
