@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, field_validator
 from typing import List, Optional, Any, Union
 
 
@@ -19,7 +19,10 @@ class QuestionRequest(BaseModel):
 class MessagePart(BaseModel):
     kind: str
     text: Optional[str] = None
-    data: Optional[Union[dict, List[Any]]] = None
+    data: Optional[Any] = None
+
+    class Config:
+        extra = "allow"
 
 
 class Message(BaseModel):
@@ -28,23 +31,16 @@ class Message(BaseModel):
     parts: List[MessagePart]
     messageId: str
 
-
-class MessageParams(BaseModel):
-    message: Message
-    configuration: Optional[dict] = None
-
-
-class ExecuteParams(BaseModel):
-    messages: List[Message]
-    contextId: Optional[str] = None
-    taskId: Optional[str] = None
+    class Config:
+        extra = "allow"
 
 
 class JSONRPCParams(BaseModel):
-    """Flexible params that can be either MessageParams or ExecuteParams"""
-
+    # For message/send method
     message: Optional[Message] = None
-    configuration: Optional[dict] = None
+    configuration: Optional[Any] = None
+
+    # For execute method
     messages: Optional[List[Message]] = None
     contextId: Optional[str] = None
     taskId: Optional[str] = None

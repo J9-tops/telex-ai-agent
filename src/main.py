@@ -7,14 +7,13 @@ import os
 import logging
 import asyncio
 
-from src.models.a2a import JSONRPCRequest, JSONRPCResponse
+from src.models.a2a import JSONRPCRequest, JSONRPCResponse, A2AMessage, MessagePart
 from src.services.freelance_agent import FreelanceAgent
 from src.services.job_scraper import JobScraper, run_scheduled_scraping
 from src.db.session import init_db, get_db
 from src.routers import job, trends, admin, ai
 from sqlalchemy.orm import Session
 from bs4 import BeautifulSoup
-from src.schemas import Message, MessagePart
 
 load_dotenv()
 
@@ -142,8 +141,9 @@ async def a2a_endpoint(request: Request):
                     if user_text:
                         break
 
+            # Use A2AMessage instead of Message
             messages = [
-                Message(
+                A2AMessage(
                     kind=msg.kind,
                     role=msg.role,
                     parts=[MessagePart(kind="text", text=user_text)],

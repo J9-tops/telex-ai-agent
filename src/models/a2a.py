@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Literal, Optional, List, Dict, Any
+from typing import Literal, Optional, List, Dict, Any, Union
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -7,7 +7,7 @@ from uuid import uuid4
 class MessagePart(BaseModel):
     kind: Literal["text", "data", "file"]
     text: Optional[str] = None
-    data: Optional[Dict[str, Any]] = None
+    data: Optional[Any] = None  # Changed to accept any type
     file_url: Optional[str] = None
 
 
@@ -34,7 +34,7 @@ class MessageConfiguration(BaseModel):
 
 class MessageParams(BaseModel):
     message: A2AMessage
-    configuration: MessageConfiguration = Field(default_factory=MessageConfiguration)
+    configuration: Optional[MessageConfiguration] = None  # Made optional
 
 
 class ExecuteParams(BaseModel):
@@ -47,7 +47,7 @@ class JSONRPCRequest(BaseModel):
     jsonrpc: Literal["2.0"]
     id: str
     method: Literal["message/send", "execute"]
-    params: MessageParams | ExecuteParams
+    params: Union[MessageParams, ExecuteParams]  # Changed to Union
 
 
 class TaskStatus(BaseModel):
