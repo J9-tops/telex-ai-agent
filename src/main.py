@@ -123,16 +123,13 @@ async def a2a_endpoint(request: Request):
             msg = rpc_request.params.message
             user_text = ""
 
-            # Extract text from parts
             for part in msg.parts:
                 if part.kind == "text" and part.text:
                     user_text = part.text
                     break
                 elif part.kind == "data" and part.data:
-                    # Handle data as dict
                     if isinstance(part.data, dict):
                         user_text = part.data.get("text", "")
-                    # Handle data as list
                     elif isinstance(part.data, list):
                         for item in part.data:
                             if isinstance(item, dict) and item.get("kind") == "text":
@@ -141,7 +138,6 @@ async def a2a_endpoint(request: Request):
                     if user_text:
                         break
 
-            # Use A2AMessage instead of Message
             messages = [
                 A2AMessage(
                     kind=msg.kind,
