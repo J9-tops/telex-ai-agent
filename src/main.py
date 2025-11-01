@@ -124,18 +124,23 @@ async def a2a_endpoint(request: Request):
             msg = rpc_request.params.message
             user_text = ""
 
-            data_part = next(
-                (p for p in msg.parts if getattr(p, "kind", None) == "data"), None
-            )
-            if data_part:
-                user_text = data_part.data.get("text", "")
-
-            if not user_text:
-                text_parts = [
-                    p for p in msg.parts if getattr(p, "kind", None) == "text"
-                ]
-                if text_parts:
-                    user_text = getattr(text_parts[0], "text", "")
+            # Extract text from parts
+            for part in msg.parts:
+                if part.kind == "text" and part.text:
+                    user_text = part.text
+                    break
+                elif part.kind == "data" and part.data:
+                    # Handle data as dict
+                    if isinstance(part.data, dict):
+                        user_text = part.data.get("text", "")
+                    # Handle data as list
+                    elif isinstance(part.data, list):
+                        for item in part.data:
+                            if isinstance(item, dict) and item.get("kind") == "text":
+                                user_text = item.get("text", "")
+                                break
+                    if user_text:
+                        break
 
             messages = [
                 Message(
@@ -145,13 +150,13 @@ async def a2a_endpoint(request: Request):
                     messageId=msg.messageId,
                 )
             ]
-            config = getattr(rpc_request.params, "configuration", None)
+            config = rpc_request.params.configuration
             logger.info(f"Processing message/send: {user_text}")
 
         elif rpc_request.method == "execute":
-            messages = getattr(rpc_request.params, "messages", [])
-            context_id = getattr(rpc_request.params, "contextId", None)
-            task_id = getattr(rpc_request.params, "taskId", None)
+            messages = rpc_request.params.messages or []
+            context_id = rpc_request.params.contextId
+            task_id = rpc_request.params.taskId
             logger.info(
                 f"Processing execute: {len(messages)} messages, contextId={context_id}"
             )
