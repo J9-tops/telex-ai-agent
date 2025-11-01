@@ -124,14 +124,11 @@ async def a2a_endpoint(request: Request):
             msg = rpc_request.params.message
             user_text = ""
 
-            data_parts = [p for p in msg.parts if getattr(p, "kind", None) == "data"]
-            if data_parts:
-                last_messages = getattr(data_parts[0], "data", [])
-                if len(last_messages) >= 2:
-                    raw_text = last_messages[-2].get("text", "")
-                    user_text = BeautifulSoup(raw_text, "html.parser").get_text(
-                        strip=True
-                    )
+            data_part = next(
+                (p for p in msg.parts if getattr(p, "kind", None) == "data"), None
+            )
+            if data_part:
+                user_text = data_part.data.get("text", "")
 
             if not user_text:
                 text_parts = [
