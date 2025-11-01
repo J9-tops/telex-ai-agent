@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Any
 
 
 class CompareSkillsRequest(BaseModel):
@@ -14,3 +14,22 @@ class LearningPathRequest(BaseModel):
 
 class QuestionRequest(BaseModel):
     question: str
+
+
+class Part(BaseModel):
+    kind: str
+    text: Optional[str] = None
+    data: Optional[List[dict]] = None
+
+
+class Message(BaseModel):
+    kind: str
+    role: str
+    parts: List[Part]
+    messageId: str
+
+
+class MessagePart(BaseModel):
+    kind: str  # "text" or "data"
+    text: Optional[str] = None
+    data: Optional[List[Any]] = None

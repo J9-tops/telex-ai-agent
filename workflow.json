@@ -25,9 +25,9 @@
                 "role": "user",
                 "parts": [
                   {
-                    "kind": "text",
-                    "text": "{{ $json.message }}"
-                  }
+    "kind": "data",
+    "data": { "text": "" }  
+  }
                 ]
               }
             ]
@@ -48,19 +48,6 @@
       "position": [1200, -112]
     }
   ],
-  "connections": {
-    "freelance_trends_agent": {
-      "main": [
-        [
-          {
-            "node": "output",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
   "pinData": {},
   "settings": {
     "executionOrder": "v1"

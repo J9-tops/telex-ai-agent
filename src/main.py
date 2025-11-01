@@ -13,6 +13,8 @@ from src.services.job_scraper import JobScraper, run_scheduled_scraping
 from src.db.session import init_db, get_db
 from src.routers import job, trends, admin, ai
 from sqlalchemy.orm import Session
+from bs4 import BeautifulSoup
+from src.schemas import Message, MessagePart
 
 load_dotenv()
 
@@ -119,15 +121,40 @@ async def a2a_endpoint(request: Request):
         config = None
 
         if rpc_request.method == "message/send":
-            messages = [rpc_request.params.message]
-            config = rpc_request.params.configuration
-            logger.info(
-                f"Processing message/send: {messages[0].parts[0].text if messages else 'No text'}"
-            )
+            msg = rpc_request.params.message
+            user_text = ""
+
+            data_parts = [p for p in msg.parts if getattr(p, "kind", None) == "data"]
+            if data_parts:
+                last_messages = getattr(data_parts[0], "data", [])
+                if len(last_messages) >= 2:
+                    raw_text = last_messages[-2].get("text", "")
+                    user_text = BeautifulSoup(raw_text, "html.parser").get_text(
+                        strip=True
+                    )
+
+            if not user_text:
+                text_parts = [
+                    p for p in msg.parts if getattr(p, "kind", None) == "text"
+                ]
+                if text_parts:
+                    user_text = getattr(text_parts[0], "text", "")
+
+            messages = [
+                Message(
+                    kind=msg.kind,
+                    role=msg.role,
+                    parts=[MessagePart(kind="text", text=user_text)],
+                    messageId=msg.messageId,
+                )
+            ]
+            config = getattr(rpc_request.params, "configuration", None)
+            logger.info(f"Processing message/send: {user_text}")
+
         elif rpc_request.method == "execute":
-            messages = rpc_request.params.messages
-            context_id = rpc_request.params.contextId
-            task_id = rpc_request.params.taskId
+            messages = getattr(rpc_request.params, "messages", [])
+            context_id = getattr(rpc_request.params, "contextId", None)
+            task_id = getattr(rpc_request.params, "taskId", None)
             logger.info(
                 f"Processing execute: {len(messages)} messages, contextId={context_id}"
             )
@@ -139,7 +166,6 @@ async def a2a_endpoint(request: Request):
         logger.info(f"Agent processing completed: state={result.status.state}")
 
         response = JSONRPCResponse(id=rpc_request.id, result=result)
-
         return response.model_dump()
 
     except Exception as e:

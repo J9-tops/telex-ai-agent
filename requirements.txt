@@ -17,3 +17,4 @@ pytest-cov
 black
 ruff
 google-genai
+beautifulsoup4
