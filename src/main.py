@@ -37,14 +37,20 @@ async def lifespan(app: FastAPI):
     logger.info("Database initialized")
 
     scraper = JobScraper(
-        api_url=os.getenv("API_URL"),
-        rate_limit=int(os.getenv("RATE_LIMIT", 60)),
+        api_url=os.getenv("API_URL"), rate_limit=int(os.getenv("RATE_LIMIT", 60))
     )
 
     freelance_agent = FreelanceAgent(scraper=scraper)
     logger.info("Freelance agent initialized")
 
-    scrape_interval = int(os.getenv("JOB_FETCH_INTERVAL_MINUTES", 1440))
+    logger.info("Performing initial job scrape...")
+    try:
+        initial_result = await scraper.scrape_and_store()
+        logger.info(f"Initial scrape completed: {initial_result}")
+    except Exception as e:
+        logger.error(f"Initial scrape failed: {e}")
+
+    scrape_interval = int(os.getenv("JOB_FETCH_INTERVAL_MINUTES", 30))
     scraper_task = asyncio.create_task(
         run_scheduled_scraping(scraper, interval_minutes=scrape_interval)
     )
@@ -88,6 +94,9 @@ async def a2a_endpoint(request: Request):
     """Main A2A endpoint for freelance trends agent"""
     try:
         body = await request.json()
+        logger.info(
+            f"Received A2A request: method={body.get('method')}, id={body.get('id')}"
+        )
 
         if body.get("jsonrpc") != "2.0" or "id" not in body:
             return JSONResponse(
@@ -112,14 +121,22 @@ async def a2a_endpoint(request: Request):
         if rpc_request.method == "message/send":
             messages = [rpc_request.params.message]
             config = rpc_request.params.configuration
+            logger.info(
+                f"Processing message/send: {messages[0].parts[0].text if messages else 'No text'}"
+            )
         elif rpc_request.method == "execute":
             messages = rpc_request.params.messages
             context_id = rpc_request.params.contextId
             task_id = rpc_request.params.taskId
+            logger.info(
+                f"Processing execute: {len(messages)} messages, contextId={context_id}"
+            )
 
+        logger.info("Calling freelance agent...")
         result = await freelance_agent.process_messages(
             messages=messages, context_id=context_id, task_id=task_id, config=config
         )
+        logger.info(f"Agent processing completed: state={result.status.state}")
 
         response = JSONRPCResponse(id=rpc_request.id, result=result)
 
@@ -144,7 +161,28 @@ async def a2a_endpoint(request: Request):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "agent": "freelance-trends", "version": "1.0.0"}
+    from src.db.repository import JobRepository
+    from src.db.session import get_db_context
+
+    try:
+        with get_db_context() as db:
+            total_jobs = JobRepository.get_total_jobs(db)
+            jobs_24h = JobRepository.get_jobs_count_by_period(db, hours=24)
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        total_jobs = -1
+        jobs_24h = -1
+
+    return {
+        "status": "healthy",
+        "agent": "freelance-trends",
+        "version": "1.0.0",
+        "database": {
+            "connected": total_jobs >= 0,
+            "total_jobs": total_jobs,
+            "jobs_last_24h": jobs_24h,
+        },
+    }
 
 
 @app.get("/")
@@ -156,7 +194,7 @@ async def root():
         "description": "AI agent tracking freelancing jobs and identifying emerging trends",
         "endpoints": {"a2a": "/a2a/freelance", "health": "/health", "docs": "/docs"},
         "capabilities": [
-            "Track jobs from open source APIs",
+            "Track latest jobs ",
             "Analyze trending skills and technologies",
             "Identify popular job roles",
             "Provide job search and statistics",
