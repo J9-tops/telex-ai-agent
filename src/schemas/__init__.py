@@ -15,7 +15,6 @@ from src.schemas.ai import (
     CompareSkillsRequest,
     LearningPathRequest,
     QuestionRequest,
-    Part,
     Message,
     MessagePart,
 )
@@ -32,7 +31,6 @@ __all__ = [
     "QuestionRequest",
     "CompareSkillsRequest",
     "LearningPathRequest",
-    "Part",
     "Message",
     "MessagePart",
 ]
