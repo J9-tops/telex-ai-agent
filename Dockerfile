@@ -24,6 +24,7 @@ EXPOSE 5001
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=5001
+ENV PYTHONPATH=/app  
 
 # Run the application
 CMD ["python", "src/main.py"]

@@ -281,5 +281,3 @@ For issues and questions:
 - Documentation: See `/docs` endpoint
 
 ---
-
-Built with ❤️ using FastAPI, SQLAlchemy, and the A2A Protocol
