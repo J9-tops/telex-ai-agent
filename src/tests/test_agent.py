@@ -1,3 +1,9 @@
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
+
 import pytest
 from src.services.freelance_agent import FreelanceAgent
 from src.services.job_scraper import JobScraper

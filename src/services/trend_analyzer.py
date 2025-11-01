@@ -1,6 +1,6 @@
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import Counter, defaultdict
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -21,7 +21,7 @@ class TrendAnalyzer:
 
     def analyze_skill_trends(self, db: Session) -> List[TrendingSkill]:
         """Analyze trending skills based on job postings"""
-        cutoff_date = datetime.utcnow() - timedelta(days=self.window_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.window_days)
         previous_cutoff = cutoff_date - timedelta(days=self.window_days)
 
         current_jobs = db.query(Job).filter(Job.date_posted >= cutoff_date).all()
@@ -71,7 +71,7 @@ class TrendAnalyzer:
 
     def analyze_role_trends(self, db: Session) -> List[TrendingRole]:
         """Analyze trending job roles/positions"""
-        cutoff_date = datetime.utcnow() - timedelta(days=self.window_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.window_days)
         previous_cutoff = cutoff_date - timedelta(days=self.window_days)
 
         current_jobs = db.query(Job).filter(Job.date_posted >= cutoff_date).all()
@@ -155,7 +155,7 @@ class TrendAnalyzer:
 
     def identify_skill_clusters(self, db: Session) -> Dict[str, List[str]]:
         """Identify skills that often appear together"""
-        cutoff_date = datetime.utcnow() - timedelta(days=self.window_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.window_days)
 
         jobs = db.query(Job).filter(Job.date_posted >= cutoff_date).all()
 

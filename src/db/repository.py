@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, and_, or_
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from src.models.job import Job, Skill, TrendAnalysis, SkillTrend
 from src.schemas.job import JobSearchQuery, TrendQuery
@@ -69,7 +69,7 @@ class JobRepository:
     @staticmethod
     def get_recent_jobs(db: Session, days: int = 7, limit: int = 100) -> List[Job]:
         """Get recent jobs within specified days"""
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         return (
             db.query(Job)
             .filter(Job.date_posted >= cutoff_date)
@@ -86,7 +86,7 @@ class JobRepository:
     @staticmethod
     def get_jobs_count_by_period(db: Session, hours: int = 24) -> int:
         """Get count of jobs posted in last N hours"""
-        cutoff_date = datetime.utcnow() - timedelta(hours=hours)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(hours=hours)
         return (
             db.query(func.count(Job.id)).filter(Job.date_posted >= cutoff_date).scalar()
         )
@@ -104,7 +104,7 @@ class SkillRepository:
         skill = db.query(Skill).filter(Skill.normalized_name == normalized).first()
 
         if skill:
-            skill.last_seen = datetime.utcnow()
+            skill.last_seen = datetime.now(timezone.utc)
             skill.total_mentions += 1
         else:
             skill = Skill(
@@ -166,7 +166,7 @@ class TrendRepository:
         db: Session, days: int = 30, limit: int = 10
     ) -> List[TrendAnalysis]:
         """Get trend analyses from last N days"""
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         return (
             db.query(TrendAnalysis)
             .filter(TrendAnalysis.analysis_date >= cutoff_date)
@@ -189,7 +189,7 @@ class TrendRepository:
         db: Session, skill_name: str, days: int = 30
     ) -> List[SkillTrend]:
         """Get trend data for a specific skill"""
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         return (
             db.query(SkillTrend)
             .filter(
