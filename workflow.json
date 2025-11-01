@@ -1,0 +1,108 @@
+{
+  "active": true,
+  "category": "career",
+  "description": "An AI agent that tracks freelancing jobs and identifies emerging trends in skills, roles, and technologies",
+  "id": "fT7xK9mL2nPqR5wY",
+  "name": "freelance_trends_agent",
+  "long_description": "You are a specialized AI assistant that helps freelancers and developers navigate the job market by providing real-time insights on trending skills, popular roles, and emerging technologies.\n\nYour primary functions are:\n- Track and analyze freelance job postings from RemoteOK and other sources\n- Identify trending skills, technologies, and frameworks\n- Provide data-driven career advice and recommendations\n- Compare skills and technologies based on market demand\n- Generate personalized learning paths for skill development\n- Answer questions about the freelance job market\n- Analyze job descriptions to extract key requirements\n- Summarize job market trends and patterns\n\nWhen responding:\n- Always provide data-backed insights with specific numbers and percentages when available\n- Be clear about the time period of your analysis (e.g., \"In the last 30 days...\")\n- If asked to compare skills, provide both quantitative data and qualitative insights\n- When suggesting learning paths, be specific with steps and time estimates\n- Keep responses actionable and relevant to career development\n- If insufficient data is available, offer to scrape fresh data or analyze trends\n- Be encouraging and supportive while remaining realistic about market conditions\n\nAvailable commands and queries:\n- \"show trending skills\" - Display top trending technologies and skills\n- \"show trending roles\" - Show most popular job positions\n- \"show statistics\" - Get overall job market statistics\n- \"search jobs\" - Find recent job postings\n- \"compare [skill1] vs [skill2]\" - Compare two skills or technologies\n- \"learn [skill]\" - Get a personalized learning path\n- \"analyze trends\" - Run comprehensive market analysis\n- \"scrape jobs\" - Fetch latest job postings\n- \"what/how/why/should\" questions - Ask any market-related question\n\nYou have access to:\n- Real-time job data from RemoteOK API (updated every 30 minutes)\n- Historical trend data and growth metrics\n- Skill clustering and technology relationships\n- AI-powered analysis via Google Gemini\n- Job description parsing and analysis\n\nAlways strive to help users make informed career decisions based on current market data.",
+  "short_description": "Track freelance jobs and discover trending skills, roles, and technologies with AI-powered insights",
+  "nodes": [
+    {
+      "id": "freelance_trends_agent",
+      "name": "Freelance Trends Agent",
+      "parameters": {
+        "model": "gemini-2.0-flash-exp",
+        "temperature": 0.7,
+        "maxTokens": 1000,
+        "provider": "google",
+        "capabilities": [
+          "job_tracking",
+          "trend_analysis",
+          "skill_comparison",
+          "learning_paths",
+          "market_insights",
+          "job_search",
+          "data_visualization"
+        ]
+      },
+      "position": [816, -112],
+      "type": "a2a/mastra-a2a-node",
+      "typeVersion": 1,
+      "url": "http://localhost:5001/a2a/freelance"
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-15T10:00:00.000Z",
+      "updatedAt": "2025-01-15T10:00:00.000Z",
+      "id": "1",
+      "name": "freelance"
+    },
+    {
+      "createdAt": "2025-01-15T10:00:00.000Z",
+      "updatedAt": "2025-01-15T10:00:00.000Z",
+      "id": "2",
+      "name": "jobs"
+    },
+    {
+      "createdAt": "2025-01-15T10:00:00.000Z",
+      "updatedAt": "2025-01-15T10:00:00.000Z",
+      "id": "3",
+      "name": "trends"
+    },
+    {
+      "createdAt": "2025-01-15T10:00:00.000Z",
+      "updatedAt": "2025-01-15T10:00:00.000Z",
+      "id": "4",
+      "name": "career"
+    },
+    {
+      "createdAt": "2025-01-15T10:00:00.000Z",
+      "updatedAt": "2025-01-15T10:00:00.000Z",
+      "id": "5",
+      "name": "ai-powered"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-15T10:00:00.000Z",
+  "versionId": "1",
+  "meta": {
+    "version": "1.0.0",
+    "author": "Freelance Trends Agent",
+    "documentation": "https://telex-ai-agent-production.up.railway.app//docs",
+    "features": [
+      "Real-time job tracking from RemoteOK",
+      "Trending skills and technologies analysis",
+      "Job role popularity tracking",
+      "AI-powered market insights via Google Gemini",
+      "Skill comparison and evaluation",
+      "Personalized learning path generation",
+      "Natural language Q&A about job market",
+      "Job description analysis",
+      "Skill clustering and relationships",
+      "Historical trend data",
+      "Growth metrics and predictions"
+    ],
+    "data_sources": [
+      "RemoteOK API (https://remoteok.com/api)"
+    ],
+    "ai_provider": "Google Gemini 2.0 Flash",
+    "update_frequency": "1440 minutes",
+    "supported_languages": ["English"],
+    "response_formats": [
+      "text/plain",
+      "application/json",
+      "text/markdown"
+    ]
+  },
+  "connections": {},
+  "webhookId": null
+}
