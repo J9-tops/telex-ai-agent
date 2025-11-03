@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import os
 import logging
 import asyncio
+import httpx
 
 from src.models.a2a import JSONRPCRequest, JSONRPCResponse, A2AMessage, MessagePart
 from src.services.freelance_agent import FreelanceAgent
@@ -149,6 +150,7 @@ async def a2a_endpoint(request: Request):
         context_id = None
         task_id = None
         config = None
+        push_notification_config = None
 
         if rpc_request.method == "message/send":
             msg = rpc_request.params.message
@@ -178,6 +180,9 @@ async def a2a_endpoint(request: Request):
                 )
             ]
             config = rpc_request.params.configuration
+            if config and hasattr(config, "pushNotificationConfig"):
+                push_notification_config = config.pushNotificationConfig
+                logger.info(f"Push notification config: {push_notification_config}")
             logger.info(f"Processing message/send: {user_text}")
 
         elif rpc_request.method == "execute":
@@ -188,14 +193,45 @@ async def a2a_endpoint(request: Request):
                 f"Processing execute: {len(messages)} messages, contextId={context_id}"
             )
 
-        logger.info("Calling freelance agent...")
-        result = await freelance_agent.process_messages(
-            messages=messages, context_id=context_id, task_id=task_id, config=config
-        )
-        logger.info(f"Agent processing completed: state={result.status.state}")
+        is_blocking = True
+        if config:
+            is_blocking = getattr(config, "blocking", True)
 
-        response = JSONRPCResponse(id=rpc_request.id, result=result)
-        return response.model_dump()
+        logger.info(f"Request blocking mode: {is_blocking}")
+
+        if not is_blocking and push_notification_config:
+            # Non-blocking: return immediately and process in background
+            logger.info("Non-blocking request - processing in background")
+
+            # Start background task
+            asyncio.create_task(
+                process_and_notify(
+                    messages=messages,
+                    context_id=context_id,
+                    task_id=task_id,
+                    config=config,
+                    push_config=push_notification_config,
+                    request_id=rpc_request.id,
+                )
+            )
+
+            return {
+                "jsonrpc": "2.0",
+                "id": rpc_request.id,
+                "result": {
+                    "status": "processing",
+                    "message": "Request accepted and processing in background",
+                },
+            }
+        else:
+            logger.info("Blocking request - processing synchronously")
+            result = await freelance_agent.process_messages(
+                messages=messages, context_id=context_id, task_id=task_id, config=config
+            )
+            logger.info(f"Agent processing completed: state={result.status.state}")
+
+            response = JSONRPCResponse(id=rpc_request.id, result=result)
+            return response.model_dump()
 
     except Exception as e:
         logger.error(f"Error in A2A endpoint: {e}", exc_info=True)
@@ -211,6 +247,55 @@ async def a2a_endpoint(request: Request):
                 },
             },
         )
+
+
+async def process_and_notify(
+    messages, context_id, task_id, config, push_config, request_id
+):
+    """Process request in background and send push notification"""
+    try:
+        logger.info(f"[BACKGROUND] Starting processing for request {request_id}")
+
+        result = await freelance_agent.process_messages(
+            messages=messages, context_id=context_id, task_id=task_id, config=config
+        )
+
+        logger.info(f"[BACKGROUND] Processing completed: state={result.status.state}")
+
+        notification_url = push_config.url if hasattr(push_config, "url") else None
+        notification_token = (
+            push_config.token if hasattr(push_config, "token") else None
+        )
+
+        if notification_url:
+            logger.info(
+                f"[BACKGROUND] Sending push notification to: {notification_url}"
+            )
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                headers = {
+                    "Content-Type": "application/json",
+                }
+
+                if notification_token:
+                    headers["Authorization"] = f"Bearer {notification_token}"
+
+                response_data = JSONRPCResponse(
+                    id=request_id, result=result
+                ).model_dump()
+
+                response = await client.post(
+                    notification_url, json=response_data, headers=headers
+                )
+
+                logger.info(
+                    f"[BACKGROUND] Push notification sent: {response.status_code}"
+                )
+        else:
+            logger.warning(f"[BACKGROUND] No notification URL provided")
+
+    except Exception as e:
+        logger.error(f"[BACKGROUND] Error processing and notifying: {e}", exc_info=True)
 
 
 @app.get("/health")
