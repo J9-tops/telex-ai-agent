@@ -271,6 +271,8 @@ async def process_and_notify(
         if isinstance(push_config, dict):
             notification_url = push_config.get("url")
             notification_token = push_config.get("token")
+            logger.debug(f"[DEBUG] push_config value: {push_config}")
+            logger.debug(f"[DEBUG] notification_url: {notification_url}")
 
         if not notification_url:
             logger.warning(
