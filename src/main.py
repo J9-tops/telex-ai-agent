@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 load_dotenv()
 
+
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -259,17 +260,19 @@ async def process_and_notify(
     try:
         logger.info(f"[BACKGROUND] Starting processing for request {request_id}")
 
+        NOTIFICATION_URL = os.getenv("NOTIFICATION_URL")
+
         result = await freelance_agent.process_messages(
             messages=messages, context_id=context_id, task_id=task_id, config=config
         )
 
         logger.info(f"[BACKGROUND] Processing completed: state={result.status.state}")
 
-        notification_url = None
+        notification_url = NOTIFICATION_URL
         notification_token = None
 
         if isinstance(push_config, dict):
-            notification_url = push_config.get("url")
+            notification_url = push_config.get("url") or NOTIFICATION_URL
             notification_token = push_config.get("token")
             logger.debug(f"[DEBUG] push_config value: {push_config}")
             logger.debug(f"[DEBUG] notification_url: {notification_url}")
