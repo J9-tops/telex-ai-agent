@@ -180,8 +180,12 @@ async def a2a_endpoint(request: Request):
                 )
             ]
             config = rpc_request.params.configuration
-            if config and hasattr(config, "pushNotificationConfig"):
-                push_notification_config = config.pushNotificationConfig
+            if (
+                config
+                and isinstance(config, dict)
+                and "pushNotificationConfig" in config
+            ):
+                push_notification_config = config["pushNotificationConfig"]
                 logger.info(f"Push notification config: {push_notification_config}")
             logger.info(f"Processing message/send: {user_text}")
 
@@ -200,10 +204,9 @@ async def a2a_endpoint(request: Request):
         logger.info(f"Request blocking mode: {is_blocking}")
 
         if not is_blocking and push_notification_config:
-            # Non-blocking: return immediately and process in background
+
             logger.info("Non-blocking request - processing in background")
 
-            # Start background task
             asyncio.create_task(
                 process_and_notify(
                     messages=messages,
@@ -262,10 +265,18 @@ async def process_and_notify(
 
         logger.info(f"[BACKGROUND] Processing completed: state={result.status.state}")
 
-        notification_url = push_config.url if hasattr(push_config, "url") else None
-        notification_token = (
-            push_config.token if hasattr(push_config, "token") else None
-        )
+        notification_url = None
+        notification_token = None
+
+        if isinstance(push_config, dict):
+            notification_url = push_config.get("url")
+            notification_token = push_config.get("token")
+
+        if not notification_url:
+            logger.warning(
+                f"[BACKGROUND] No notification URL provided in config: {push_config}"
+            )
+            return
 
         if notification_url:
             logger.info(
