@@ -16,7 +16,7 @@ class AIService:
             raise ValueError("API_KEY environment variable is required for Gemini")
 
         self.client = genai.Client(api_key=api_key)
-        self.model = "gemini-2.0-flash-exp"
+        self.model = "gemini-2.5-flash"
         logger.info(f"AI Service initialized with model: {self.model}")
 
     async def generate_trend_insights(
