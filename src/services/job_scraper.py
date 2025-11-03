@@ -159,7 +159,7 @@ class JobScraper:
         }
 
 
-async def run_scheduled_scraping(scraper: JobScraper, interval_minutes: int = 30):
+async def run_scheduled_scraping(scraper: JobScraper, interval_minutes: int = 1440):
     """Run scraping on a schedule"""
     while True:
         try:

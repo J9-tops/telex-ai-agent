@@ -1,8 +1,6 @@
 import logging
 from typing import List, Dict, Any, Optional
 from uuid import uuid4
-from datetime import datetime
-import json
 
 from src.models.a2a import (
     A2AMessage,
@@ -16,6 +14,7 @@ from src.db.session import get_db_context
 from src.db.repository import JobRepository, SkillRepository, TrendRepository
 from src.services.trend_analyzer import TrendAnalyzer
 from src.services.job_scraper import JobScraper
+from src.services.rss_scraper import RSSFeedScraper
 from src.services.ai import AIService
 from src.schemas.job import JobSearchQuery
 
@@ -25,8 +24,9 @@ logger = logging.getLogger(__name__)
 class FreelanceAgent:
     """AI Agent for tracking freelance jobs and trends using A2A protocol"""
 
-    def __init__(self, scraper: JobScraper):
+    def __init__(self, scraper: JobScraper, rss_scraper: RSSFeedScraper):
         self.scraper = scraper
+        self.rss_scraper = rss_scraper
         self.analyzer = TrendAnalyzer()
         self.ai_service = AIService()
         self.conversations = {}
@@ -85,7 +85,6 @@ class FreelanceAgent:
     ) -> tuple[str, List[Artifact], str]:
         """Parse user intent and execute appropriate action using LLM for classification."""
 
-        # Use AI to classify intent and potentially extract entities
         intent_data = await self.ai_service.classify_intent(user_text)
         intent = intent_data.get("intent")
         entities = intent_data.get("entities", {})
@@ -97,9 +96,7 @@ class FreelanceAgent:
         elif intent == "get_trending_roles":
             return await self._get_trending_roles()
         elif intent == "search_jobs":
-            search_query_text = entities.get(
-                "job_query", user_text
-            )  # Use extracted query or full text
+            search_query_text = entities.get("job_query", user_text)
             return await self._search_jobs(search_query_text)
         elif intent == "get_statistics":
             return await self._get_statistics()
@@ -113,24 +110,19 @@ class FreelanceAgent:
             skill1 = entities.get("skill1")
             skill2 = entities.get("skill2")
             if skill1 and skill2:
-                return await self._compare_skills(
-                    f"compare {skill1} vs {skill2}"
-                )  # Re-use existing method
+                return await self._compare_skills(f"compare {skill1} vs {skill2}")
             else:
                 return "Please specify two skills to compare.", [], "completed"
         elif intent == "get_learning_path":
             target_skill = entities.get("target_skill")
             if target_skill:
-                return await self._get_learning_path(
-                    f"learn {target_skill}"
-                )  # Re-use existing method
+                return await self._get_learning_path(f"learn {target_skill}")
             else:
                 return "Please specify a skill to learn.", [], "completed"
         elif intent == "answer_question":
             return await self._answer_question(user_text, context_id)
-        else:  # Fallback to general chat or help if intent is unclear
-            # This is where your 'chat_response' could come in handy
-            return self._get_help()  # Or a more dynamic chat response
+        else:
+            return self._get_help()
 
     async def _get_trending_skills(self) -> tuple[str, List[Artifact], str]:
         """Get trending skills"""
@@ -146,6 +138,7 @@ class FreelanceAgent:
                 )
 
             response = "**Top Trending Skills (Last 30 Days)**\n\n"
+            response += "Based on remote job listings from We Work Remotely:\n\n"
             for i, skill in enumerate(trending_skills[:10], 1):
                 response += f"{i}. **{skill.skill_name.title()}**: {skill.current_mentions} mentions ({skill.growth_percentage})\n"
 
@@ -167,6 +160,7 @@ class FreelanceAgent:
                 return "No trending roles data available yet.", [], "completed"
 
             response = "**Top Trending Job Roles (Last 30 Days)**\n\n"
+            response += "From remote job postings across multiple categories:\n\n"
             for i, role in enumerate(trending_roles[:10], 1):
                 skills_str = (
                     ", ".join(role.top_skills[:3]) if role.top_skills else "N/A"
@@ -191,13 +185,17 @@ class FreelanceAgent:
             if not jobs:
                 return "No jobs found matching your criteria.", [], "completed"
 
-            response = f"**Found {len(jobs)} Recent Jobs**\n\n"
+            response = f"**Found {len(jobs)} Recent Remote Jobs**\n\n"
+            response += "From We Work Remotely RSS Feeds:\n\n"
             for i, job in enumerate(jobs[:10], 1):
                 skills = ", ".join(job.tags[:5]) if job.tags else "N/A"
                 response += f"{i}. **{job.position}** at {job.company}\n"
                 response += f"   Location: {job.location}\n"
                 response += f"   Skills: {skills}\n"
-                response += f"   Posted: {job.date_posted.strftime('%Y-%m-%d')}\n\n"
+                response += f"   Posted: {job.date_posted.strftime('%Y-%m-%d')}\n"
+                if job.url:
+                    response += f"   Apply: {job.url}\n"
+                response += "\n"
 
             jobs_data = [
                 {
@@ -230,16 +228,19 @@ class FreelanceAgent:
             skill_names = [skill.name for skill in top_skills]
 
             response = "**Freelance Jobs Statistics**\n\n"
+            response += "Data aggregated from We Work Remotely RSS feeds:\n\n"
             response += f"📊 **Total Jobs Tracked**: {total_jobs}\n"
             response += f"📅 **Last 24 Hours**: {jobs_24h} jobs\n"
             response += f"📅 **Last 7 Days**: {jobs_7d} jobs\n"
             response += f"🔥 **Top Skills**: {', '.join(skill_names)}\n"
+            response += f"\n🌍 **All positions are remote-friendly**\n"
 
             stats_data = {
                 "total_jobs": total_jobs,
                 "jobs_24h": jobs_24h,
                 "jobs_7d": jobs_7d,
                 "top_skills": skill_names,
+                "data_sources": ["We Work Remotely RSS Feeds"],
             }
 
             artifact = Artifact(
@@ -252,10 +253,11 @@ class FreelanceAgent:
         """Run trend analysis with AI insights"""
         result = await self.analyzer.run_full_analysis()
 
-        response = "**Trend Analysis Completed with AI Insights**\n\n"
-        response += f"✅ Analyzed {result['total_jobs_analyzed']} jobs\n"
+        response = "**Comprehensive Trend Analysis Completed**\n\n"
+        response += f"✅ Analyzed {result['total_jobs_analyzed']} remote jobs\n"
         response += f"📈 Found {result['trending_skills_count']} trending skills\n"
-        response += f"💼 Found {result['trending_roles_count']} trending roles\n\n"
+        response += f"💼 Found {result['trending_roles_count']} trending roles\n"
+        response += f"🌐 Data from We Work Remotely RSS feeds\n\n"
 
         if result.get("ai_insights"):
             response += "**🤖 AI Insights:**\n\n"
@@ -268,13 +270,18 @@ class FreelanceAgent:
         return response, [artifact], "completed"
 
     async def _scrape_jobs(self) -> tuple[str, List[Artifact], str]:
-        """Scrape new jobs"""
-        result = await self.scraper.scrape_and_store()
+        """Scrape new jobs from RSS feeds"""
+        result = await self.rss_scraper.scrape_and_store()
 
-        response = "**Job Scraping Completed**\n\n"
-        response += f"✅ Fetched {result['total_fetched']} jobs\n"
-        response += f"➕ Added {result['jobs_added']} new jobs\n"
-        response += f"🏷️ Tracked {result['skills_added']} skills\n"
+        response = "**RSS Feed Scraping Completed**\n\n"
+        response += f"📡 **Feeds Processed**: {result['feeds_processed']}\n"
+        response += f"✅ **Fetched**: {result['total_fetched']} jobs\n"
+        response += f"➕ **New Jobs**: {result['jobs_added']}\n"
+        response += f"🔄 **Updated Jobs**: {result.get('jobs_updated', 0)}\n"
+        response += f"🏷️ **Skills Tracked**: {result['skills_added']}\n\n"
+        response += (
+            "Sources: Full-Stack, Frontend, Programming, Design, DevOps categories"
+        )
 
         artifact = Artifact(
             name="scrape_result", parts=[MessagePart(kind="data", data=result)]
@@ -334,31 +341,35 @@ class FreelanceAgent:
         """Get help message"""
         response = """**Freelance Trends Agent - Available Commands**
 
-I can help you track and analyze freelance job trends! Here's what I can do:
+I track remote freelance jobs from We Work Remotely across multiple categories!
 
 📊 **Statistics**
-• "show statistics" - Get overall job statistics
+• "show statistics" - Overall job market stats
 • "show stats" - Same as above
 
 🔥 **Trends**
-• "show trending skills" - See top trending technologies
-• "show trending roles" - See most popular job positions
-• "latest analysis" - Get the most recent trend analysis
+• "show trending skills" - Top trending technologies
+• "show trending roles" - Most popular positions
+• "latest analysis" - Most recent trend analysis
 
 🔍 **Search**
 • "search jobs" - Find recent job postings
-• "find jobs" - Same as above
+• "find React jobs" - Search for specific technologies
 
 🤖 **AI-Powered Features**
-• "compare Python vs JavaScript" - Compare two skills
-• "learn React" - Get a learning path for a skill
-• Ask any question about the job market
+• "compare Python vs JavaScript" - Compare skills
+• "learn React" - Get a learning path
+• Ask questions about the job market
 
 ⚙️ **Actions**
-• "scrape jobs" - Fetch latest jobs
-• "analyze trends" - Run comprehensive AI-powered trend analysis
+• "scrape jobs" - Fetch latest jobs from RSS feeds
+• "analyze trends" - Run AI-powered trend analysis
 
-Just ask me naturally and I'll help you discover what's hot in the freelance market!
+💡 **Data Sources**
+• We Work Remotely RSS Feeds
+• Categories: Full-Stack, Frontend, Programming, Design, DevOps
+
+Just ask naturally and I'll help you discover remote job trends!
 """
 
         artifact = Artifact(
@@ -472,7 +483,8 @@ Just ask me naturally and I'll help you discover what's hot in the freelance mar
                 "recent_jobs": recent_jobs,
                 "top_skills": top_skills,
                 "total_companies": total_companies,
-                "additional_context": "Data from API, updated every 30 minutes",
+                "additional_context": "Data from We Work Remotely RSS feeds, updated hourly",
+                "data_sources": "Full-Stack, Frontend, Programming, Design, DevOps categories",
             }
 
         answer = await self.ai_service.answer_question(user_text, context_data)

@@ -137,7 +137,7 @@ Format your response as JSON."""
                 model=self.model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    temperature=0.1,  # Keep temperature low for classification
+                    temperature=0.1,
                     max_output_tokens=200,
                 ),
             )

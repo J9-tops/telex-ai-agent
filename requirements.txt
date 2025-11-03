@@ -18,3 +18,5 @@ black
 ruff
 google-genai
 beautifulsoup4
+feedparser
+lxml

@@ -10,10 +10,10 @@ import asyncio
 from src.models.a2a import JSONRPCRequest, JSONRPCResponse, A2AMessage, MessagePart
 from src.services.freelance_agent import FreelanceAgent
 from src.services.job_scraper import JobScraper, run_scheduled_scraping
+from src.services.rss_scraper import RSSFeedScraper, run_scheduled_rss_scraping
 from src.db.session import init_db, get_db
 from src.routers import job, trends, admin, ai
 from sqlalchemy.orm import Session
-from bs4 import BeautifulSoup
 
 load_dotenv()
 
@@ -25,39 +25,70 @@ logger = logging.getLogger(__name__)
 
 freelance_agent = None
 scraper_task = None
+rss_scraper_task = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown"""
-    global freelance_agent, scraper_task
+    global freelance_agent, scraper_task, rss_scraper_task
 
     logger.info("Starting Freelance Trends Agent...")
 
     init_db()
     logger.info("Database initialized")
 
+    rss_scraper = RSSFeedScraper(rate_limit=int(os.getenv("RATE_LIMIT", 1440)))
+
     scraper = JobScraper(
-        api_url=os.getenv("API_URL"), rate_limit=int(os.getenv("RATE_LIMIT", 60))
+        api_url=os.getenv("API_URL"), rate_limit=int(os.getenv("RATE_LIMIT", 1400))
     )
 
-    freelance_agent = FreelanceAgent(scraper=scraper)
+    freelance_agent = FreelanceAgent(scraper=scraper, rss_scraper=rss_scraper)
     logger.info("Freelance agent initialized")
 
     logger.info("Performing initial job scrape...")
     try:
-        initial_result = await scraper.scrape_and_store()
-        logger.info(f"Initial scrape completed: {initial_result}")
+        initial_result = await rss_scraper.scrape_and_store()
+        logger.info(f"Initial job scrape completed: {initial_result}")
     except Exception as e:
-        logger.error(f"Initial scrape failed: {e}")
+        logger.error(f"Initial job scrape failed: {e}")
 
-    scrape_interval = int(os.getenv("JOB_FETCH_INTERVAL_MINUTES", 30))
-    scraper_task = asyncio.create_task(
-        run_scheduled_scraping(scraper, interval_minutes=scrape_interval)
+    if os.getenv("API_URL"):
+        logger.info("Performing initial API scrape...")
+        try:
+            initial_api_result = await scraper.scrape_and_store()
+            logger.info(f"Initial API scrape completed: {initial_api_result}")
+        except Exception as e:
+            logger.error(f"Initial API scrape failed: {e}")
+
+    rss_scrape_interval = int(os.getenv("RSS_SCRAPE_INTERVAL_MINUTES", 1440))
+    rss_scraper_task = asyncio.create_task(
+        run_scheduled_rss_scraping(
+            rss_scraper, interval_minutes=rss_scrape_interval, skip_first=True
+        )
     )
-    logger.info(f"Background scraping started (interval: {scrape_interval} minutes)")
+    logger.info(
+        f"RSS background scraping started (interval: {rss_scrape_interval} minutes)"
+    )
+
+    if os.getenv("API_URL"):
+        scrape_interval = int(os.getenv("JOB_FETCH_INTERVAL_MINUTES", 1440))
+        scraper_task = asyncio.create_task(
+            run_scheduled_scraping(scraper, interval_minutes=scrape_interval)
+        )
+        logger.info(
+            f"API background scraping started (interval: {scrape_interval} minutes)"
+        )
 
     yield
+
+    if rss_scraper_task:
+        rss_scraper_task.cancel()
+        try:
+            await rss_scraper_task
+        except asyncio.CancelledError:
+            pass
 
     if scraper_task:
         scraper_task.cancel()
@@ -206,6 +237,10 @@ async def health_check():
             "total_jobs": total_jobs,
             "jobs_last_24h": jobs_24h,
         },
+        "scrapers": {
+            "rss_enabled": True,
+            "api_enabled": bool(os.getenv("API_URL")),
+        },
     }
 
 
@@ -215,13 +250,13 @@ async def root():
     return {
         "name": "Freelance Trends Agent",
         "version": "1.0.0",
-        "description": "AI agent tracking freelancing jobs and identifying emerging trends",
+        "description": "AI agent tracking freelancing jobs from multiple sources",
         "endpoints": {"a2a": "/a2a/freelance", "health": "/health", "docs": "/docs"},
         "capabilities": [
-            "Track latest jobs ",
+            "Track latest remote jobs ",
             "Analyze trending skills and technologies",
             "Identify popular job roles",
             "Provide job search and statistics",
-            "A2A protocol support",
+            "A2A protocol support for AI agents",
         ],
     }
