@@ -1,6 +1,10 @@
 import os
 import logging
+import time
+import hashlib
+import asyncio
 from typing import List, Dict, Any, Optional
+from collections import deque
 from google import genai
 from google.genai import types
 
@@ -17,7 +21,109 @@ class AIService:
 
         self.client = genai.Client(api_key=api_key)
         self.model = "gemini-2.5-flash"
+
+        self._request_cache = {}
+
+        self.cache_ttls = {
+            "intent_classification": 3600,
+            "trend_insights": 86400,
+            "skill_comparison": 43200,
+            "learning_path": 604800,
+            "job_analysis": 3600,
+            "answer_question": 1800,
+            "summarize_jobs": 3600,
+            "chat_response": 0,
+            "default": 1800,
+        }
+
+        self.request_times = deque(maxlen=60)
+        self.max_requests_per_minute = 10
+
+        self.total_requests = 0
+        self.cache_hits = 0
+
         logger.info(f"AI Service initialized with model: {self.model}")
+        logger.info(f"Cache TTLs: {self.cache_ttls}")
+
+    def _get_cache_key(self, prompt: str, cache_type: str = "default") -> str:
+        """Generate cache key from prompt and type"""
+        return f"{cache_type}:{hashlib.md5(prompt.encode()).hexdigest()}"
+
+    async def _check_rate_limit(self):
+        """Check and enforce rate limiting"""
+        now = time.time()
+
+        while self.request_times and now - self.request_times[0] > 60:
+            self.request_times.popleft()
+
+        if len(self.request_times) >= self.max_requests_per_minute:
+            wait_time = 60 - (now - self.request_times[0])
+            logger.warning(f"Rate limit reached. Waiting {wait_time:.2f}s")
+            await asyncio.sleep(wait_time)
+
+        self.request_times.append(now)
+
+    async def _cached_generate(
+        self, prompt: str, cache_type: str = "default", use_cache: bool = True, **kwargs
+    ):
+        """Generate content with type-specific caching support"""
+        cache_key = self._get_cache_key(prompt, cache_type)
+        cache_ttl = self.cache_ttls.get(cache_type, self.cache_ttls["default"])
+
+        if use_cache and cache_ttl > 0 and cache_key in self._request_cache:
+            cached_time, cached_response = self._request_cache[cache_key]
+            if time.time() - cached_time < cache_ttl:
+                self.cache_hits += 1
+                logger.info(
+                    f"[CACHE HIT] Type: {cache_type}, "
+                    f"Key: {cache_key[:20]}..., "
+                    f"Age: {int(time.time() - cached_time)}s, "
+                    f"TTL: {cache_ttl}s"
+                )
+                return cached_response
+
+        await self._check_rate_limit()
+
+        self.total_requests += 1
+        logger.info(
+            f"[GEMINI API CALL #{self.total_requests}] "
+            f"Type: {cache_type}, "
+            f"Prompt length: {len(prompt)} chars"
+        )
+
+        try:
+            response = self.client.models.generate_content(
+                model=self.model, contents=prompt, **kwargs
+            )
+
+            if use_cache and cache_ttl > 0:
+                self._request_cache[cache_key] = (time.time(), response)
+                logger.info(
+                    f"[CACHE STORE] Type: {cache_type}, "
+                    f"Key: {cache_key[:20]}..., "
+                    f"TTL: {cache_ttl}s"
+                )
+
+            return response
+
+        except Exception as e:
+            logger.error(f"[GEMINI API ERROR] Type: {cache_type}, Error: {str(e)}")
+            raise
+
+    def clear_cache(self, cache_type: Optional[str] = None):
+        """Clear the request cache (optionally for specific type)"""
+        if cache_type:
+            keys_to_delete = [
+                k for k in self._request_cache.keys() if k.startswith(f"{cache_type}:")
+            ]
+            for key in keys_to_delete:
+                del self._request_cache[key]
+            logger.info(
+                f"Cleared cache for type: {cache_type} ({len(keys_to_delete)} entries)"
+            )
+        else:
+            self._request_cache.clear()
+            logger.info("All cache cleared")
 
     async def generate_trend_insights(
         self,
@@ -33,9 +139,10 @@ class AIService:
         )
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
+            response = await self._cached_generate(
+                prompt=prompt,
+                cache_type="trend_insights",
+                use_cache=True,
                 config=types.GenerateContentConfig(
                     temperature=0.7,
                     max_output_tokens=1000,
@@ -69,9 +176,10 @@ Please provide:
 Format your response as JSON."""
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
+            response = await self._cached_generate(
+                prompt=prompt,
+                cache_type="job_analysis",  # 1-hour cache
+                use_cache=True,
                 config=types.GenerateContentConfig(
                     temperature=0.3,
                     max_output_tokens=500,
@@ -101,64 +209,68 @@ Format your response as JSON."""
     async def classify_intent(self, user_query: str) -> Dict[str, Any]:
         """Classify the user's intent and extract relevant entities."""
 
-        prompt = f"""Classify the user's intent from the following query.
-    Extract any relevant entities like skill names or job search terms.
+        prompt = f"""Classify this query into ONE intent. Respond with ONLY valid JSON, no explanation.
 
-    Available intents:
-    - get_trending_skills (e.g., "show trending skills", "top tech")
-    - get_trending_roles (e.g., "popular job roles", "trending positions")
-    - search_jobs (e.g., "find jobs in React", "show Python openings")
-    - get_statistics (e.g., "market stats", "overall summary")
-    - run_analysis (e.g., "analyze trends", "deep dive into data")
-    - scrape_jobs (e.g., "update jobs", "fetch latest listings")
-    - get_latest_analysis (e.g., "what's the newest report", "latest insights")
-    - compare_skills (e.g., "compare Java vs Go", "Python vs R")
-    - get_learning_path (e.g., "how to learn Machine Learning", "study NodeJS")
-    - answer_question (for general questions not covered by specific intents)
-    - get_help (if the query is unclear or asking for help)
+Query: "{user_query}"
 
-    User Query: f"{user_query}"
+Available intents:
+- get_trending_skills: show/list trending/popular/top skills or technologies
+- get_trending_roles: show/list trending/popular roles or positions
+- search_jobs: find/search/show jobs (with or without specific tech)
+- get_statistics: show stats/statistics/numbers/overview
+- run_analysis: analyze/deep dive/full analysis
+- scrape_jobs: update/fetch/scrape/refresh jobs
+- get_latest_analysis: latest/recent analysis or report
+- compare_skills: compare X vs Y or X versus Y
+- get_learning_path: learn/study/how to learn a skill
+- answer_question: general questions about market/trends
+- get_help: help/commands/what can you do
 
-    Respond in JSON format with 'intent' and 'entities'.
-    Example for "find jobs in React":
-    {{"intent": "search_jobs", "entities": {{"job_query": "React"}}}}
-    Example for "compare Python vs JavaScript":
-    {{"intent": "compare_skills", "entities": {{"skill1": "Python", "skill2": "JavaScript"}}}}
-    Example for "what are the top skills?":
-    {{"intent": "get_trending_skills", "entities": {{}}}}
-    Example for "Tell me about the market":
-    {{"intent": "answer_question", "entities": {{}}}}
-    """
+Response format:
+{{"intent": "intent_name", "entities": {{"key": "value"}}}}
+
+Examples:
+"show trending skills" -> {{"intent": "get_trending_skills", "entities": {{}}}}
+"find React jobs" -> {{"intent": "search_jobs", "entities": {{"job_query": "React"}}}}
+"compare Python vs JavaScript" -> {{"intent": "compare_skills", "entities": {{"skill1": "Python", "skill2": "JavaScript"}}}}
+"learn React" -> {{"intent": "get_learning_path", "entities": {{"target_skill": "React"}}}}
+"""
 
         try:
-            import json
+            logger.info(f"[CLASSIFY INTENT] Query: {user_query[:50]}...")
 
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
+            response = await self._cached_generate(
+                prompt=prompt,
+                cache_type="intent_classification",  # 1-hour cache
+                use_cache=True,
                 config=types.GenerateContentConfig(
                     temperature=0.1,
-                    max_output_tokens=200,
+                    max_output_tokens=150,
                 ),
             )
 
-            result = response.text
-            # Ensure proper JSON parsing
-            if "```json" in result:
-                result = result.split("```json")[1].split("```")[0].strip()
-            elif "```" in result:
-                result = result.split("```")[1].split("```")[0].strip()
+            result = response.text.strip()
 
-            return json.loads(result)
+            result = result.replace("```json", "").replace("```", "").strip()
+
+            import json
+
+            parsed = json.loads(result)
+
+            logger.info(
+                f"[INTENT CLASSIFIED] {parsed.get('intent')} with entities: {parsed.get('entities', {})}"
+            )
+
+            return parsed
 
         except Exception as e:
             logger.error(
                 f"Error classifying intent: {e}, Raw response: {response.text if 'response' in locals() else 'N/A'}"
             )
             return {
-                "intent": "answer_question",
+                "intent": "get_help",
                 "entities": {},
-            }  # Fallback to general question
+            }
 
     async def generate_skill_learning_path(
         self, target_skill: str, current_skills: List[str]
@@ -179,9 +291,10 @@ Provide:
 Keep it concise and actionable."""
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
+            response = await self._cached_generate(
+                prompt=prompt,
+                cache_type="learning_path",
+                use_cache=True,
                 config=types.GenerateContentConfig(
                     temperature=0.8,
                     max_output_tokens=800,
@@ -219,9 +332,10 @@ Provide:
 Keep it concise (under 300 words)."""
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
+            response = await self._cached_generate(
+                prompt=prompt,
+                cache_type="skill_comparison",  # 12-hour cache
+                use_cache=True,
                 config=types.GenerateContentConfig(
                     temperature=0.7,
                     max_output_tokens=500,
@@ -253,9 +367,10 @@ Provide a helpful, accurate answer based on the data. Be specific and cite numbe
 Keep response under 250 words."""
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
+            response = await self._cached_generate(
+                prompt=prompt,
+                cache_type="answer_question",  # 30-minute cache
+                use_cache=True,
                 config=types.GenerateContentConfig(
                     temperature=0.7,
                     max_output_tokens=400,
@@ -294,9 +409,10 @@ Provide:
 Keep it concise (under 200 words)."""
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
+            response = await self._cached_generate(
+                prompt=prompt,
+                cache_type="summarize_jobs",
+                use_cache=True,
                 config=types.GenerateContentConfig(
                     temperature=0.6,
                     max_output_tokens=350,
@@ -393,9 +509,10 @@ Respond naturally and helpfully. If the question is about job trends, use the co
 Keep responses conversational and under 200 words."""
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
+            response = await self._cached_generate(
+                prompt=prompt,
+                cache_type="chat_response",
+                use_cache=False,
                 config=types.GenerateContentConfig(
                     temperature=0.8,
                     max_output_tokens=350,
@@ -409,3 +526,30 @@ Keep responses conversational and under 200 words."""
             return (
                 "I'm having trouble right now. Could you try rephrasing your question?"
             )
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get statistics about API usage"""
+        cache_age_distribution = {}
+        now = time.time()
+
+        for key, (cached_time, _) in self._request_cache.items():
+            cache_type = key.split(":")[0]
+            age = int(now - cached_time)
+            if cache_type not in cache_age_distribution:
+                cache_age_distribution[cache_type] = []
+            cache_age_distribution[cache_type].append(age)
+
+        return {
+            "total_requests": self.total_requests,
+            "cache_hits": self.cache_hits,
+            "cache_hit_rate": (
+                f"{(self.cache_hits / self.total_requests * 100):.1f}%"
+                if self.total_requests > 0
+                else "0%"
+            ),
+            "cache_size": len(self._request_cache),
+            "cache_by_type": {k: len(v) for k, v in cache_age_distribution.items()},
+            "recent_requests_count": len(self.request_times),
+            "cache_ttls": self.cache_ttls,
+            "max_requests_per_minute": self.max_requests_per_minute,
+        }
