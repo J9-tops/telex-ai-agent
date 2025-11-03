@@ -28,8 +28,8 @@ PORT=5001
 HOST=0.0.0.0
 DATABASE_URL=sqlite:///./freelance_trends.db
 REDIS_URL=redis://localhost:6379/0
-REMOTEOK_API_URL=https://remoteok.com/api
-JOB_FETCH_INTERVAL_MINUTES=30
+API_URL=https://api.com
+JOB_FETCH_INTERVAL_MINUTES=1440
 LOG_LEVEL=INFO
 
 # AI Configuration (Google Gemini)

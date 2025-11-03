@@ -1,10 +1,10 @@
 # Freelance Trends Agent 🚀
 
-An AI agent that tracks the latest freelancing jobs from RemoteOK and identifies emerging trends in skills, roles, and technologies using the A2A (Agent-to-Agent) protocol.
+An AI agent that tracks the latest freelancing jobs and identifies emerging trends in skills, roles, and technologies using the A2A (Agent-to-Agent) protocol.
 
-## Features ✨
+## Features 
 
-- **Automated Job Scraping**: Continuously fetches jobs from RemoteOK API
+- **Automated Job Scraping**: Continuously fetches jobs from  API
 - **Trend Analysis**: Identifies trending skills, technologies, and job roles
 - **A2A Protocol Support**: Full JSON-RPC 2.0 A2A protocol implementation
 - **REST API**: Traditional REST endpoints for job search and statistics
@@ -12,7 +12,7 @@ An AI agent that tracks the latest freelancing jobs from RemoteOK and identifies
 - **Growth Metrics**: Tracks skill and role popularity over time
 - **Natural Language Interface**: Chat with the agent to get insights
 
-## Architecture 🏗️
+## Architecture 
 
 ```
 src/
@@ -29,7 +29,7 @@ src/
 ├── schemas/               # Pydantic schemas
 │   └── job.py            # Request/response schemas
 ├── services/              # Business logic
-│   ├── job_scraper.py    # RemoteOK API integration
+│   ├── job_scraper.py    # API integration
 │   ├── trend_analyzer.py # Trend analysis engine
 │   └── freelance_agent.py # A2A agent implementation
 ├── tests/                 # Test suite
@@ -127,7 +127,7 @@ curl -X POST http://localhost:5001/a2a/freelance \
 - "find jobs"
 
 **Actions**
-- "scrape jobs" - Fetch latest jobs from RemoteOK
+- "scrape jobs" - Fetch latest jobs
 - "analyze trends" - Run comprehensive trend analysis
 
 ### REST API Endpoints
@@ -152,7 +152,7 @@ curl -X POST http://localhost:5001/a2a/freelance \
 **Documentation**
 - Visit `http://localhost:5001/docs` for interactive API documentation
 
-## Configuration ⚙️
+## Configuration 
 
 Key environment variables:
 
@@ -165,15 +165,15 @@ HOST=0.0.0.0
 DATABASE_URL=postgresql://user:pass@localhost:5432/freelance_trends
 
 # Job Scraping
-JOB_FETCH_INTERVAL_MINUTES=30
-REMOTEOK_API_URL=https://remoteok.com/api
+JOB_FETCH_INTERVAL_MINUTES=1440
+API_URL=https://api.com
 
 # Trend Analysis
 TREND_ANALYSIS_WINDOW_DAYS=30
 MIN_JOB_MENTIONS_FOR_TREND=5
 ```
 
-## Development 🛠️
+## Development
 
 ### Run Tests
 
@@ -198,16 +198,9 @@ alembic upgrade head
 ## Background Jobs 📅
 
 The agent automatically:
-1. **Scrapes jobs** every 30 minutes (configurable)
+1. **Scrapes jobs** every day (configurable)
 2. **Tracks skills** from job postings
 3. **Builds trend history** over time
-
-## Data Sources 📊
-
-- **RemoteOK API**: `https://remoteok.com/api`
-- Real-time remote job postings
-- Skills/tags extraction
-- Company and location data
 
 ## A2A Protocol 🤖
 
@@ -252,32 +245,5 @@ This agent implements the A2A (Agent-to-Agent) protocol for standardized AI agen
   }
 }
 ```
-
-## Roadmap 🗺️
-
-- [ ] AI-powered job recommendations
-- [ ] Email alerts for trending skills
-- [ ] Multi-platform job source integration
-- [ ] Salary trend analysis
-- [ ] Geographic trend analysis
-- [ ] Skill learning path suggestions
-
-## Contributing 🤝
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new features
-4. Submit a pull request
-
-## License 📄
-
-MIT License - see LICENSE file for details
-
-## Support 💬
-
-For issues and questions:
-- GitHub Issues: <your-repo-url>/issues
-- Documentation: See `/docs` endpoint
 
 ---
