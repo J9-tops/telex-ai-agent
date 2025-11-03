@@ -198,8 +198,8 @@ async def a2a_endpoint(request: Request):
             )
 
         is_blocking = True
-        if config:
-            is_blocking = getattr(config, "blocking", True)
+        if isinstance(config, dict):
+            is_blocking = config.get("blocking", True)
 
         logger.info(f"Request blocking mode: {is_blocking}")
 
@@ -277,6 +277,14 @@ async def process_and_notify(
         if not notification_url:
             logger.warning(
                 f"[BACKGROUND] No notification URL provided in config: {push_config}"
+            )
+            return
+
+        if not notification_url or not str(notification_url).startswith(
+            ("http://", "https://")
+        ):
+            logger.error(
+                f"[BACKGROUND] Invalid or missing notification URL: {notification_url}"
             )
             return
 
