@@ -489,6 +489,11 @@ Just ask naturally and I'll help you discover remote job trends!
 
         answer = await self.ai_service.answer_question(user_text, context_data)
 
+        if not answer or answer.strip() == "":
+            answer = (
+                "I couldn't generate a response. Please try rephrasing your question."
+            )
+
         response = f"**Answer:**\n\n{answer}"
 
         artifact = Artifact(

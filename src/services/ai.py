@@ -239,18 +239,18 @@ Keep it concise (under 300 words)."""
 
         prompt = f"""You are a freelance job market expert. Answer this question based on the provided data:
 
-Question: {question}
+    Question: {question}
 
-Market Context:
-- Total jobs tracked: {context_data.get('total_jobs', 'N/A')}
-- Recent jobs (7d): {context_data.get('recent_jobs', 'N/A')}
-- Top skills: {', '.join(context_data.get('top_skills', [])[:5])}
-- Active companies: {context_data.get('total_companies', 'N/A')}
+    Market Context:
+    - Total jobs tracked: {context_data.get('total_jobs', 'N/A')}
+    - Recent jobs (7d): {context_data.get('recent_jobs', 'N/A')}
+    - Top skills: {', '.join(context_data.get('top_skills', [])[:5])}
+    - Active companies: {context_data.get('total_companies', 'N/A')}
 
-Additional context: {context_data.get('additional_context', 'None')}
+    Additional context: {context_data.get('additional_context', 'None')}
 
-Provide a helpful, accurate answer based on the data. Be specific and cite numbers when relevant.
-Keep response under 250 words."""
+    Provide a helpful, accurate answer based on the data. Be specific and cite numbers when relevant.
+    Keep response under 250 words."""
 
         try:
             response = self.client.models.generate_content(
@@ -262,10 +262,13 @@ Keep response under 250 words."""
                 ),
             )
 
-            return response.text
+            # FIX: Ensure we always return a valid string
+            answer = response.text if response.text else "No response generated"
+            return answer.strip()
 
         except Exception as e:
             logger.error(f"Error answering question: {e}")
+            # FIX: Return a proper default message
             return "I'm having trouble processing your question right now. Please try again or rephrase your question."
 
     async def summarize_jobs(self, jobs: List[Dict[str, Any]]) -> str:

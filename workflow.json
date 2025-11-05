@@ -20,17 +20,11 @@
           "id": "1",
           "method": "message/send",
           "params": {
-            "message": [
-              {
-                "role": "user",
-               "parts": [
-  {
-    "kind": "text",
-    "text": "{{$input.text}}"
-  }
-]
-              }
-            ]
+            "message": {
+              "kind": "message",
+              "role": "user",
+              "parts": [{ "kind": "text", "text": "{{$input.text}}" }]
+            }
           }
         }
       },
@@ -38,14 +32,6 @@
       "type": "a2a/mastra-a2a-node",
       "typeVersion": 1,
       "url": "https://telex-ai-agent-production.up.railway.app/a2a/freelance"
-    },
-    {
-      "id": "output",
-      "name": "Output",
-      "type": "a2a/output-node",
-      "typeVersion": 1,
-      "parameters": {},
-      "position": [1200, -112]
     }
   ],
   "pinData": {},
