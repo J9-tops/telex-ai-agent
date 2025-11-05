@@ -51,8 +51,8 @@ class AIService:
             logger.error(f"Error generating insights: {e}")
             return "Trend analysis completed. Check the detailed data for insights."
 
-    async def analyze_job_description(self, job_description: str) -> str:
-        """Analyze a job description and return a Markdown formatted analysis."""
+    async def analyze_job_description(self, job_description: str) -> Dict[str, Any]:
+        """Extract key information from job description"""
 
         prompt = f"""Analyze this job description and extract key information:
 
@@ -66,7 +66,7 @@ Please provide:
 4. Technology stack
 5. Job category (frontend/backend/fullstack/data/devops/etc)
 
-Return the result in JSON format, but this method will convert it to Markdown."""
+Format your response as JSON."""
 
         try:
             response = self.client.models.generate_content(
@@ -80,73 +80,36 @@ Return the result in JSON format, but this method will convert it to Markdown.""
 
             import json
 
-            result = response.text or ""
-            # Extract content inside code fences if present
+            result = response.text
             if "```json" in result:
                 result = result.split("```json")[1].split("```")[0].strip()
             elif "```" in result:
                 result = result.split("```")[1].split("```")[0].strip()
 
-            # Try to parse JSON, then convert to Markdown
-            try:
-                data = json.loads(result)
-                md = ["## Job Analysis\n"]
-
-                md.append("**Required skills:**\n")
-                for s in data.get("required_skills", []):
-                    md.append(f"- {s}\n")
-
-                md.append(
-                    f"\n**Experience level:** {data.get('experience_level', 'unknown')}\n"
-                )
-
-                md.append("\n**Key responsibilities:**\n")
-                for r in data.get("key_responsibilities", []):
-                    md.append(f"- {r}\n")
-
-                md.append("\n**Technology stack:**\n")
-                for t in data.get("technology_stack", []):
-                    md.append(f"- {t}\n")
-
-                md.append(
-                    f"\n**Job category:** {data.get('job_category', 'general')}\n"
-                )
-
-                return "".join(md)
-            except Exception:
-                # If parsing fails, return the raw AI text in a Markdown block
-                return f"## Job Analysis (raw)\n\n{result.strip()}"
+            return json.loads(result)
 
         except Exception as e:
             logger.error(f"Error analyzing job description: {e}")
-            # Fallback as Markdown
-            return (
-                "## Job Analysis (fallback)\n\n"
-                "**Required skills:**\n- None identified\n\n"
-                "**Experience level:** unknown\n\n"
-                "**Key responsibilities:**\n- None identified\n\n"
-                "**Technology stack:**\n- None identified\n\n"
-                "**Job category:** general\n"
-            )
+            return {
+                "required_skills": [],
+                "experience_level": "unknown",
+                "key_responsibilities": [],
+                "technology_stack": [],
+                "job_category": "general",
+            }
 
-    async def classify_intent(self, user_query: str) -> str:
-        """Classify the user's intent and return a Markdown-formatted result.
-
-        Note: This method returns Markdown (no JSON) describing the detected intent and
-        any extracted entities.
-        """
+    async def classify_intent(self, user_query: str) -> Dict[str, Any]:
+        """Classify the user's intent with more flexible parsing."""
 
         user_lower = user_query.lower()
-        intent = "answer_question"
-        entities: Dict[str, Any] = {}
 
         if any(
             word in user_lower
             for word in ["trending skill", "top skill", "popular tech", "hot tech"]
         ):
-            intent = "get_trending_skills"
+            return {"intent": "get_trending_skills", "entities": {}}
 
-        elif any(
+        if any(
             word in user_lower
             for word in [
                 "trending role",
@@ -155,9 +118,9 @@ Return the result in JSON format, but this method will convert it to Markdown.""
                 "trending position",
             ]
         ):
-            intent = "get_trending_roles"
+            return {"intent": "get_trending_roles", "entities": {}}
 
-        elif any(
+        if any(
             word in user_lower
             for word in ["search job", "find job", "job opening", "show job"]
         ):
@@ -168,34 +131,33 @@ Return the result in JSON format, but this method will convert it to Markdown.""
                 .replace("jobs", "")
                 .strip()
             )
-            intent = "search_jobs"
-            entities = {"job_query": query}
+            return {"intent": "search_jobs", "entities": {"job_query": query}}
 
-        elif any(
+        if any(
             word in user_lower
             for word in ["statistic", "stat", "overview", "summary", "how many"]
         ):
-            intent = "get_statistics"
+            return {"intent": "get_statistics", "entities": {}}
 
-        elif any(
+        if any(
             word in user_lower
             for word in ["analyze trend", "run analysis", "deep dive", "analyze"]
         ):
-            intent = "run_analysis"
+            return {"intent": "run_analysis", "entities": {}}
 
-        elif any(
+        if any(
             word in user_lower
             for word in ["scrape", "update job", "fetch job", "refresh"]
         ):
-            intent = "scrape_jobs"
+            return {"intent": "scrape_jobs", "entities": {}}
 
-        elif any(
+        if any(
             word in user_lower
             for word in ["latest analysis", "recent analysis", "last report"]
         ):
-            intent = "get_latest_analysis"
+            return {"intent": "get_latest_analysis", "entities": {}}
 
-        elif any(
+        if any(
             word in user_lower
             for word in ["learn", "learning path", "study", "how to become", "roadmap"]
         ):
@@ -212,10 +174,9 @@ Return the result in JSON format, but this method will convert it to Markdown.""
             ]:
                 skill = skill.replace(remove, "")
             skill = skill.strip()
-            intent = "get_learning_path"
-            entities = {"target_skill": skill}
+            return {"intent": "get_learning_path", "entities": {"target_skill": skill}}
 
-        elif "compar" in user_lower and (
+        if "compar" in user_lower and (
             "vs" in user_lower or "versus" in user_lower or " or " in user_lower
         ):
             words = (
@@ -232,26 +193,18 @@ Return the result in JSON format, but this method will convert it to Markdown.""
                 if len(w) > 2 and w not in ["and", "the", "with"]
             ]
             if len(skills) >= 2:
-                intent = "compare_skills"
-                entities = {"skill1": skills[0], "skill2": skills[1]}
+                return {
+                    "intent": "compare_skills",
+                    "entities": {"skill1": skills[0], "skill2": skills[1]},
+                }
 
-        elif any(
+        if any(
             word in user_lower
             for word in ["help", "what can you", "capabilities", "commands"]
         ):
-            intent = "get_help"
+            return {"intent": "get_help", "entities": {}}
 
-        # Build Markdown response
-        md_lines = ["## Intent Classification\n"]
-        md_lines.append(f"**Intent:** {intent}\n\n")
-        md_lines.append("**Entities:**\n")
-        if entities:
-            for k, v in entities.items():
-                md_lines.append(f"- **{k}**: {v}\n")
-        else:
-            md_lines.append("- None detected\n")
-
-        return "".join(md_lines)
+        return {"intent": "answer_question", "entities": {}}
 
     async def generate_skill_learning_path(self, target_skill: str) -> str:
         """Generate personalized learning path for a skill with better error handling"""
