@@ -43,13 +43,13 @@ class AIService:
                 ),
             )
 
-            insights = response.text
-            logger.info("Generated trend insights successfully")
-            return insights
+            if response and response.text:
+                return response.text
+            raise ValueError("Empty response")
 
         except Exception as e:
             logger.error(f"Error generating insights: {e}")
-            return "Unable to generate AI insights at this time."
+            return "Trend analysis completed. Check the detailed data for insights."
 
     async def analyze_job_description(self, job_description: str) -> Dict[str, Any]:
         """Extract key information from job description"""
@@ -99,124 +99,233 @@ Format your response as JSON."""
             }
 
     async def classify_intent(self, user_query: str) -> Dict[str, Any]:
-        """Classify the user's intent and extract relevant entities."""
+        """Classify the user's intent with more flexible parsing."""
 
-        prompt = f"""Classify the user's intent from the following query.
-    Extract any relevant entities like skill names or job search terms.
+        user_lower = user_query.lower()
 
-    Available intents:
-    - get_trending_skills (e.g., "show trending skills", "top tech")
-    - get_trending_roles (e.g., "popular job roles", "trending positions")
-    - search_jobs (e.g., "find jobs in React", "show Python openings")
-    - get_statistics (e.g., "market stats", "overall summary")
-    - run_analysis (e.g., "analyze trends", "deep dive into data")
-    - scrape_jobs (e.g., "update jobs", "fetch latest listings")
-    - get_latest_analysis (e.g., "what's the newest report", "latest insights")
-    - compare_skills (e.g., "compare Java vs Go", "Python vs R")
-    - get_learning_path (e.g., "how to learn Machine Learning", "study NodeJS")
-    - answer_question (for general questions not covered by specific intents)
-    - get_help (if the query is unclear or asking for help)
+        if any(
+            word in user_lower
+            for word in ["trending skill", "top skill", "popular tech", "hot tech"]
+        ):
+            return {"intent": "get_trending_skills", "entities": {}}
 
-    User Query: f"{user_query}"
+        if any(
+            word in user_lower
+            for word in [
+                "trending role",
+                "popular job",
+                "job role",
+                "trending position",
+            ]
+        ):
+            return {"intent": "get_trending_roles", "entities": {}}
 
-    Respond in JSON format with 'intent' and 'entities'.
-    Example for "find jobs in React":
-    {{"intent": "search_jobs", "entities": {{"job_query": "React"}}}}
-    Example for "compare Python vs JavaScript":
-    {{"intent": "compare_skills", "entities": {{"skill1": "Python", "skill2": "JavaScript"}}}}
-    Example for "what are the top skills?":
-    {{"intent": "get_trending_skills", "entities": {{}}}}
-    Example for "Tell me about the market":
-    {{"intent": "answer_question", "entities": {{}}}}
-    """
+        if any(
+            word in user_lower
+            for word in ["search job", "find job", "job opening", "show job"]
+        ):
+            query = (
+                user_query.lower()
+                .replace("search", "")
+                .replace("find", "")
+                .replace("jobs", "")
+                .strip()
+            )
+            return {"intent": "search_jobs", "entities": {"job_query": query}}
+
+        if any(
+            word in user_lower
+            for word in ["statistic", "stat", "overview", "summary", "how many"]
+        ):
+            return {"intent": "get_statistics", "entities": {}}
+
+        if any(
+            word in user_lower
+            for word in ["analyze trend", "run analysis", "deep dive", "analyze"]
+        ):
+            return {"intent": "run_analysis", "entities": {}}
+
+        if any(
+            word in user_lower
+            for word in ["scrape", "update job", "fetch job", "refresh"]
+        ):
+            return {"intent": "scrape_jobs", "entities": {}}
+
+        if any(
+            word in user_lower
+            for word in ["latest analysis", "recent analysis", "last report"]
+        ):
+            return {"intent": "get_latest_analysis", "entities": {}}
+
+        if any(
+            word in user_lower
+            for word in ["learn", "learning path", "study", "how to become", "roadmap"]
+        ):
+            skill = user_query.lower()
+            for remove in [
+                "learn",
+                "learning path",
+                "study",
+                "how to",
+                "become",
+                "create a",
+                "for",
+                "who wants to",
+            ]:
+                skill = skill.replace(remove, "")
+            skill = skill.strip()
+            return {"intent": "get_learning_path", "entities": {"target_skill": skill}}
+
+        if "compar" in user_lower and (
+            "vs" in user_lower or "versus" in user_lower or " or " in user_lower
+        ):
+            words = (
+                user_query.lower()
+                .replace("compare", "")
+                .replace("vs", " ")
+                .replace("versus", " ")
+                .replace(" or ", " ")
+                .split()
+            )
+            skills = [
+                w.strip()
+                for w in words
+                if len(w) > 2 and w not in ["and", "the", "with"]
+            ]
+            if len(skills) >= 2:
+                return {
+                    "intent": "compare_skills",
+                    "entities": {"skill1": skills[0], "skill2": skills[1]},
+                }
+
+        if any(
+            word in user_lower
+            for word in ["help", "what can you", "capabilities", "commands"]
+        ):
+            return {"intent": "get_help", "entities": {}}
+
+        return {"intent": "answer_question", "entities": {}}
+
+    async def generate_skill_learning_path(self, target_skill: str) -> str:
+        """Generate personalized learning path for a skill with better error handling"""
+
+        prompt = f"""Create a comprehensive learning path for {target_skill}.
+
+Structure your response as follows:
+
+**Prerequisites:**
+- List 2-3 foundational skills needed
+
+**Learning Path:**
+1. **Fundamentals** (Timeframe: X weeks)
+   - Key concepts to learn
+   - What to practice
+
+2. **Intermediate** (Timeframe: X weeks)
+   - Advanced topics
+   - Projects to build
+
+3. **Advanced** (Timeframe: X weeks)
+   - Expert-level concepts
+   - Real-world applications
+
+**Recommended Resources:**
+- Types of learning materials (courses, books, docs)
+- Practice platforms
+
+**Practice Projects:**
+- 3-4 project ideas from beginner to advanced
+
+Keep it practical and actionable. Total length: 300-500 words."""
 
         try:
-            import json
+            logger.info(f"Generating learning path for: {target_skill}")
 
             response = self.client.models.generate_content(
                 model=self.model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    temperature=0.1,
-                    max_output_tokens=200,
+                    temperature=0.7,
+                    max_output_tokens=1000,
+                    top_p=0.9,
                 ),
             )
 
-            result = response.text
-            # Ensure proper JSON parsing
-            if "```json" in result:
-                result = result.split("```json")[1].split("```")[0].strip()
-            elif "```" in result:
-                result = result.split("```")[1].split("```")[0].strip()
-
-            return json.loads(result)
-
-        except Exception as e:
-            logger.error(
-                f"Error classifying intent: {e}, Raw response: {response.text if 'response' in locals() else 'N/A'}"
-            )
-            return {
-                "intent": "answer_question",
-                "entities": {},
-            }  # Fallback to general question
-
-    async def generate_skill_learning_path(
-        self, target_skill: str, current_skills: List[str]
-    ) -> str:
-        """Generate personalized learning path for a skill"""
-
-        prompt = f"""Create a learning path for someone who wants to learn {target_skill}.
-
-Their current skills: {', '.join(current_skills) if current_skills else 'None listed'}
-
-Provide:
-1. Prerequisites needed
-2. Step-by-step learning path (5-7 steps)
-3. Estimated time for each step
-4. Recommended resources (general types, not specific URLs)
-5. Projects to practice
-
-Keep it concise and actionable."""
-
-        try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.8,
-                    max_output_tokens=800,
-                ),
-            )
-
-            return response.text
+            if response and response.text and len(response.text.strip()) > 50:
+                logger.info("Successfully generated learning path")
+                return response.text.strip()
+            else:
+                logger.warning(
+                    f"Short or empty response: {response.text if response else 'None'}"
+                )
+                raise ValueError("Empty or invalid response from AI")
 
         except Exception as e:
-            logger.error(f"Error generating learning path: {e}")
-            return f"Unable to generate learning path for {target_skill} at this time."
+            logger.error(f"Error generating learning path: {e}", exc_info=True)
+
+            return f"""**Learning Path for {target_skill.title()}**
+
+**Prerequisites:**
+- Basic programming fundamentals
+- Understanding of software development concepts
+- Familiarity with version control (Git)
+
+**Learning Path:**
+
+1. **Fundamentals** (4-6 weeks)
+   - Core concepts and terminology
+   - Basic syntax and common patterns
+   - Simple exercises and tutorials
+   - Set up development environment
+
+2. **Intermediate Skills** (6-8 weeks)
+   - Advanced features and techniques
+   - Best practices and design patterns
+   - Build small to medium projects
+   - Code review and debugging
+
+3. **Advanced Topics** (8-12 weeks)
+   - Performance optimization
+   - Security considerations
+   - Testing and CI/CD
+   - Production deployment
+
+**Recommended Resources:**
+- Official documentation and guides
+- Interactive coding platforms
+- Video courses (YouTube, Udemy, Coursera)
+- Community forums and Q&A sites
+- Open source projects for reference
+
+**Practice Projects:**
+1. **Beginner:** Simple CRUD application
+2. **Intermediate:** Full-featured web app with database
+3. **Advanced:** Scalable application with authentication
+4. **Expert:** Contribute to open source projects
+
+**Timeline:** 3-6 months with consistent daily practice
+
+💡 **Tip:** Focus on building real projects rather than just following tutorials. Learn by doing!"""
 
     async def compare_skills(
         self, skill1: str, skill2: str, market_data: Dict[str, Any]
     ) -> str:
         """Compare two skills based on market trends"""
 
-        prompt = f"""Compare these two skills in the job market:
+        prompt = f"""Compare {skill1} and {skill2} for someone deciding which to learn:
 
-Skill 1: {skill1}
-- Job mentions: {market_data.get('skill1_mentions', 'N/A')}
-- Growth rate: {market_data.get('skill1_growth', 'N/A')}
-
-Skill 2: {skill2}
-- Job mentions: {market_data.get('skill2_mentions', 'N/A')}
-- Growth rate: {market_data.get('skill2_growth', 'N/A')}
+Market Data:
+- {skill1}: {market_data.get('skill1_mentions', 'N/A')} job mentions
+- {skill2}: {market_data.get('skill2_mentions', 'N/A')} job mentions
 
 Provide:
-1. Which is more in-demand and why
-2. Market trends for each
-3. Career opportunities
-4. Learning difficulty comparison
-5. Recommendation for someone choosing between them
+1. **Market Demand:** Which is more sought-after and why
+2. **Learning Curve:** Difficulty comparison
+3. **Career Opportunities:** Job roles and salaries
+4. **Future Outlook:** Which has better long-term prospects
+5. **Recommendation:** Clear advice for someone choosing between them
 
-Keep it concise (under 300 words)."""
+Be specific and practical. Length: 250-350 words."""
 
         try:
             response = self.client.models.generate_content(
@@ -224,15 +333,96 @@ Keep it concise (under 300 words)."""
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0.7,
-                    max_output_tokens=500,
+                    max_output_tokens=600,
                 ),
             )
 
-            return response.text
+            if response and response.text:
+                return response.text
+            raise ValueError("Empty response")
 
         except Exception as e:
             logger.error(f"Error comparing skills: {e}")
-            return f"Unable to compare {skill1} and {skill2} at this time."
+
+            s1_mentions = market_data.get("skill1_mentions", 0)
+            s2_mentions = market_data.get("skill2_mentions", 0)
+
+            return f"""**Comparing {skill1.title()} vs {skill2.title()}**
+
+**Market Demand:**
+Based on our job data, {skill1} has {s1_mentions} mentions while {skill2} has {s2_mentions} mentions. {'Both are highly valued' if min(s1_mentions, s2_mentions) > 50 else 'Consider market trends carefully'}.
+
+**Learning Curve:**
+Both skills require dedication. Start with fundamentals and build projects to gain proficiency.
+
+**Career Opportunities:**
+Both open doors to various roles including developer, engineer, and specialist positions.
+
+**Recommendation:**
+Choose based on:
+- Your current skill set
+- Career goals
+- Project requirements
+- Personal interest
+
+Consider learning both over time for versatility!"""
+
+    async def answer_question(self, question: str, context_data: Dict[str, Any]) -> str:
+        """Answer user question based on job market data with better fallback"""
+
+        prompt = f"""Answer this question about the freelance job market:
+
+Question: {question}
+
+Available Data:
+- Total jobs tracked: {context_data.get('total_jobs', 0)}
+- Recent jobs (7 days): {context_data.get('recent_jobs', 0)}
+- Top skills: {', '.join(context_data.get('top_skills', [])[:5])}
+- Active companies: {context_data.get('total_companies', 0)}
+- Data sources: {context_data.get('data_sources', 'Multiple RSS feeds')}
+
+Provide a helpful, data-driven answer. Be specific and cite numbers when relevant.
+Keep it concise (150-250 words)."""
+
+        try:
+            logger.info(f"Answering question: {question[:100]}...")
+
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                    max_output_tokens=500,
+                    top_p=0.9,
+                ),
+            )
+
+            if response and response.text and len(response.text.strip()) > 20:
+                logger.info("Successfully generated answer")
+                return response.text.strip()
+            else:
+                raise ValueError("Empty or too short response")
+
+        except Exception as e:
+            logger.error(f"Error answering question: {e}", exc_info=True)
+
+            total = context_data.get("total_jobs", 0)
+            recent = context_data.get("recent_jobs", 0)
+            skills = context_data.get("top_skills", [])
+
+            return f"""Based on our current job market data:
+
+We're tracking **{total} total jobs** with **{recent} posted in the last 7 days**. 
+
+The most in-demand skills right now are: **{', '.join(skills[:5]) if skills else 'various technologies'}**.
+
+For more specific insights about "{question}", try asking about:
+- Trending skills or roles
+- Specific job searches
+- Market statistics
+- Learning paths for particular technologies
+
+Our data comes from We Work Remotely RSS feeds covering Full-Stack, Frontend, Programming, Design, and DevOps categories."""
 
     async def answer_question(self, question: str, context_data: Dict[str, Any]) -> str:
         """Answer user question based on job market data"""
@@ -250,9 +440,12 @@ Keep it concise (under 300 words)."""
     Additional context: {context_data.get('additional_context', 'None')}
 
     Provide a helpful, accurate answer based on the data. Be specific and cite numbers when relevant.
-    Keep response under 250 words."""
+    Keep response under 200 words."""
 
         try:
+            logger.info(f"Answering question: {question[:100]}...")
+            logger.debug(f"Context data: {context_data}")
+
             response = self.client.models.generate_content(
                 model=self.model,
                 contents=prompt,
@@ -262,13 +455,21 @@ Keep it concise (under 300 words)."""
                 ),
             )
 
-            # FIX: Ensure we always return a valid string
-            answer = response.text if response.text else "No response generated"
-            return answer.strip()
+            logger.info("AI response received for question")
+            logger.debug(
+                f"Response text: {response.text[:200] if response.text else 'None'}..."
+            )
+
+            if not response.text or response.text.strip() == "":
+                logger.error("Empty response from AI for question answering")
+                return "I apologize, but I'm having trouble generating a response right now. Please try rephrasing your question or contact support if this persists."
+
+            return response.text.strip()
 
         except Exception as e:
-            logger.error(f"Error answering question: {e}")
-            # FIX: Return a proper default message
+            logger.error(f"Error answering question: {e}", exc_info=True)
+            logger.error(f"Question was: {question}")
+            logger.error(f"Context was: {context_data}")
             return "I'm having trouble processing your question right now. Please try again or rephrase your question."
 
     async def summarize_jobs(self, jobs: List[Dict[str, Any]]) -> str:
@@ -331,42 +532,27 @@ Keep it concise (under 200 words)."""
 
         roles_text = "\n".join(
             [
-                f"- {role['role_name']}: {role['job_count']} jobs, "
-                f"Top skills: {', '.join(role['top_skills'][:3])}"
+                f"- {role['role_name']}: {role['job_count']} jobs"
                 for role in trending_roles[:10]
             ]
         )
 
-        clusters_text = "\n".join(
-            [
-                f"- {skill}: Related to {', '.join(related[:3])}"
-                for skill, related in skill_clusters.items()
-            ]
-        )
+        return f"""Analyze this freelance job market data:
 
-        prompt = f"""Analyze this freelance job market data and provide key insights:
-
-TRENDING SKILLS (Last 30 Days):
+TRENDING SKILLS:
 {skills_text}
 
-TRENDING JOB ROLES:
+TRENDING ROLES:
 {roles_text}
 
-SKILL CLUSTERS (Technologies often used together):
-{clusters_text}
-
-TOTAL JOBS ANALYZED: {total_jobs}
+TOTAL JOBS: {total_jobs}
 
 Provide:
-1. Top 3 emerging trends in the market
-2. Skills gaining momentum and why
-3. Recommendations for freelancers (which skills to learn)
-4. Industry shifts or patterns you notice
-5. Predictions for the next quarter
+1. Top 3 market trends
+2. Skills to learn and why
+3. Predictions for next quarter
 
-Be specific, data-driven, and actionable. Keep under 400 words."""
-
-        return prompt
+Keep under 400 words."""
 
     async def chat_response(
         self,

@@ -52,7 +52,7 @@ class FreelanceAgent:
         user_text = ""
         for part in user_message.parts:
             if part.kind == "text":
-                user_text = part.text.strip().lower()
+                user_text = part.text.strip()
                 break
 
         try:
@@ -77,52 +77,54 @@ class FreelanceAgent:
             )
 
         except Exception as e:
-            logger.error(f"Error processing message: {e}")
+            logger.error(f"Error processing message: {e}", exc_info=True)
             return self._create_error_result(context_id, task_id, str(e), messages)
 
     async def _handle_intent(
         self, user_text: str, context_id: str
     ) -> tuple[str, List[Artifact], str]:
-        """Parse user intent and execute appropriate action using LLM for classification."""
+        """Parse user intent and execute appropriate action."""
 
         intent_data = await self.ai_service.classify_intent(user_text)
         intent = intent_data.get("intent")
         entities = intent_data.get("entities", {})
 
-        logger.info(f"Classified intent: {intent}, Entities: {entities}")
+        logger.info(f"Intent: {intent}, Entities: {entities}")
 
-        if intent == "get_trending_skills":
-            return await self._get_trending_skills()
-        elif intent == "get_trending_roles":
-            return await self._get_trending_roles()
-        elif intent == "search_jobs":
-            search_query_text = entities.get("job_query", user_text)
-            return await self._search_jobs(search_query_text)
-        elif intent == "get_statistics":
-            return await self._get_statistics()
-        elif intent == "run_analysis":
-            return await self._run_analysis()
-        elif intent == "scrape_jobs":
-            return await self._scrape_jobs()
-        elif intent == "get_latest_analysis":
-            return await self._get_latest_analysis()
-        elif intent == "compare_skills":
-            skill1 = entities.get("skill1")
-            skill2 = entities.get("skill2")
-            if skill1 and skill2:
-                return await self._compare_skills(f"compare {skill1} vs {skill2}")
-            else:
-                return "Please specify two skills to compare.", [], "completed"
-        elif intent == "get_learning_path":
-            target_skill = entities.get("target_skill")
-            if target_skill:
-                return await self._get_learning_path(f"learn {target_skill}")
-            else:
-                return "Please specify a skill to learn.", [], "completed"
-        elif intent == "answer_question":
-            return await self._answer_question(user_text, context_id)
-        else:
-            return self._get_help()
+        handlers = {
+            "get_trending_skills": self._get_trending_skills,
+            "get_trending_roles": self._get_trending_roles,
+            "search_jobs": lambda: self._search_jobs(
+                entities.get("job_query", user_text)
+            ),
+            "get_statistics": self._get_statistics,
+            "run_analysis": self._run_analysis,
+            "scrape_jobs": self._scrape_jobs,
+            "get_latest_analysis": self._get_latest_analysis,
+            "compare_skills": lambda: (
+                self._compare_skills(entities.get("skill1"), entities.get("skill2"))
+                if entities.get("skill1") and entities.get("skill2")
+                else self._invalid_compare()
+            ),
+            "get_learning_path": lambda: self._get_learning_path(
+                entities.get("target_skill", user_text)
+            ),
+            "get_help": self._get_help,
+            "answer_question": lambda: self._answer_question(user_text, context_id),
+        }
+
+        handler = handlers.get(
+            intent, lambda: self._answer_question(user_text, context_id)
+        )
+        return await handler()
+
+    def _invalid_compare(self) -> tuple[str, List[Artifact], str]:
+        """Handle invalid skill comparison"""
+        return (
+            "Please specify two skills to compare. Example: 'compare Python vs JavaScript'",
+            [],
+            "completed",
+        )
 
     async def _get_trending_skills(self) -> tuple[str, List[Artifact], str]:
         """Get trending skills"""
@@ -138,7 +140,7 @@ class FreelanceAgent:
                 )
 
             response = "**Top Trending Skills (Last 30 Days)**\n\n"
-            response += "Based on remote job listings from We Work Remotely:\n\n"
+            response += "Based on remote job listings:\n\n"
             for i, skill in enumerate(trending_skills[:10], 1):
                 response += f"{i}. **{skill.skill_name.title()}**: {skill.current_mentions} mentions ({skill.growth_percentage})\n"
 
@@ -160,7 +162,6 @@ class FreelanceAgent:
                 return "No trending roles data available yet.", [], "completed"
 
             response = "**Top Trending Job Roles (Last 30 Days)**\n\n"
-            response += "From remote job postings across multiple categories:\n\n"
             for i, role in enumerate(trending_roles[:10], 1):
                 skills_str = (
                     ", ".join(role.top_skills[:3]) if role.top_skills else "N/A"
@@ -186,13 +187,10 @@ class FreelanceAgent:
                 return "No jobs found matching your criteria.", [], "completed"
 
             response = f"**Found {len(jobs)} Recent Remote Jobs**\n\n"
-            response += "From We Work Remotely RSS Feeds:\n\n"
             for i, job in enumerate(jobs[:10], 1):
                 skills = ", ".join(job.tags[:5]) if job.tags else "N/A"
                 response += f"{i}. **{job.position}** at {job.company}\n"
-                response += f"   Location: {job.location}\n"
                 response += f"   Skills: {skills}\n"
-                response += f"   Posted: {job.date_posted.strftime('%Y-%m-%d')}\n"
                 if job.url:
                     response += f"   Apply: {job.url}\n"
                 response += "\n"
@@ -202,10 +200,8 @@ class FreelanceAgent:
                     "id": job.id,
                     "position": job.position,
                     "company": job.company,
-                    "location": job.location,
                     "tags": job.tags,
                     "url": job.url,
-                    "date_posted": job.date_posted.isoformat(),
                 }
                 for job in jobs
             ]
@@ -228,19 +224,16 @@ class FreelanceAgent:
             skill_names = [skill.name for skill in top_skills]
 
             response = "**Freelance Jobs Statistics**\n\n"
-            response += "Data aggregated from We Work Remotely RSS feeds:\n\n"
             response += f"📊 **Total Jobs Tracked**: {total_jobs}\n"
             response += f"📅 **Last 24 Hours**: {jobs_24h} jobs\n"
             response += f"📅 **Last 7 Days**: {jobs_7d} jobs\n"
             response += f"🔥 **Top Skills**: {', '.join(skill_names)}\n"
-            response += f"\n🌍 **All positions are remote-friendly**\n"
 
             stats_data = {
                 "total_jobs": total_jobs,
                 "jobs_24h": jobs_24h,
                 "jobs_7d": jobs_7d,
                 "top_skills": skill_names,
-                "data_sources": ["We Work Remotely RSS Feeds"],
             }
 
             artifact = Artifact(
@@ -250,21 +243,30 @@ class FreelanceAgent:
             return response, [artifact], "completed"
 
     async def _run_analysis(self) -> tuple[str, List[Artifact], str]:
-        """Run trend analysis with AI insights"""
+        """Run trend analysis"""
         result = await self.analyzer.run_full_analysis()
 
-        response = "**Comprehensive Trend Analysis Completed**\n\n"
-        response += f"✅ Analyzed {result['total_jobs_analyzed']} remote jobs\n"
+        response = "**Trend Analysis Completed**\n\n"
+        response += f"✅ Analyzed {result['total_jobs_analyzed']} jobs\n"
         response += f"📈 Found {result['trending_skills_count']} trending skills\n"
         response += f"💼 Found {result['trending_roles_count']} trending roles\n"
-        response += f"🌐 Data from We Work Remotely RSS feeds\n\n"
-
-        if result.get("ai_insights"):
-            response += "**🤖 AI Insights:**\n\n"
-            response += result["ai_insights"]
 
         artifact = Artifact(
             name="analysis_result", parts=[MessagePart(kind="data", data=result)]
+        )
+
+        return response, [artifact], "completed"
+
+    async def _scrape_jobs(self) -> tuple[str, List[Artifact], str]:
+        """Scrape new jobs"""
+        result = await self.rss_scraper.scrape_and_store()
+
+        response = "**RSS Scraping Completed**\n\n"
+        response += f"✅ **Fetched**: {result['total_fetched']} jobs\n"
+        response += f"➕ **New**: {result['jobs_added']}\n"
+
+        artifact = Artifact(
+            name="scrape_result", parts=[MessagePart(kind="data", data=result)]
         )
 
         return response, [artifact], "completed"
@@ -290,7 +292,7 @@ class FreelanceAgent:
         return response, [artifact], "completed"
 
     async def _get_latest_analysis(self) -> tuple[str, List[Artifact], str]:
-        """Get latest trend analysis with AI insights"""
+        """Get latest analysis"""
         with get_db_context() as db:
             analysis = TrendRepository.get_latest_analysis(db)
 
@@ -302,22 +304,7 @@ class FreelanceAgent:
                 )
 
             response = "**Latest Trend Analysis**\n\n"
-            response += (
-                f"📅 Date: {analysis.analysis_date.strftime('%Y-%m-%d %H:%M')}\n"
-            )
             response += f"📊 Jobs Analyzed: {analysis.total_jobs_analyzed}\n"
-            response += f"🔧 Unique Skills: {analysis.unique_skills_found}\n"
-
-            if analysis.trending_skills:
-                top_3 = analysis.trending_skills[:3]
-                response += "\n**Top 3 Trending Skills:**\n"
-                for skill in top_3:
-                    response += (
-                        f"• {skill['skill_name']}: {skill['growth_percentage']}\n"
-                    )
-
-            if analysis.ai_insights:
-                response += f"\n**🤖 AI Insights:**\n\n{analysis.ai_insights}"
 
             artifact = Artifact(
                 name="latest_analysis",
@@ -327,9 +314,6 @@ class FreelanceAgent:
                         data={
                             "analysis_date": analysis.analysis_date.isoformat(),
                             "trending_skills": analysis.trending_skills,
-                            "trending_roles": analysis.trending_roles,
-                            "skill_clusters": analysis.skill_clusters,
-                            "ai_insights": analysis.ai_insights,
                         },
                     )
                 ],
@@ -339,38 +323,19 @@ class FreelanceAgent:
 
     def _get_help(self) -> tuple[str, List[Artifact], str]:
         """Get help message"""
-        response = """**Freelance Trends Agent - Available Commands**
+        response = """**Freelance Trends Agent**
 
-I track remote freelance jobs from We Work Remotely across multiple categories!
+Ask me anything about the remote job market! Examples:
 
-📊 **Statistics**
-• "show statistics" - Overall job market stats
-• "show stats" - Same as above
+📊 "show statistics" or "how many jobs?"
+🔥 "trending skills" or "popular technologies"
+💼 "trending roles" or "popular jobs"
+🔍 "search React jobs" or "find Python positions"
+📚 "learn backend development" or "learning path for React"
+⚖️ "compare Python vs JavaScript"
+🤖 Ask questions like "what skills should I learn?"
 
-🔥 **Trends**
-• "show trending skills" - Top trending technologies
-• "show trending roles" - Most popular positions
-• "latest analysis" - Most recent trend analysis
-
-🔍 **Search**
-• "search jobs" - Find recent job postings
-• "find React jobs" - Search for specific technologies
-
-🤖 **AI-Powered Features**
-• "compare Python vs JavaScript" - Compare skills
-• "learn React" - Get a learning path
-• Ask questions about the job market
-
-⚙️ **Actions**
-• "scrape jobs" - Fetch latest jobs from RSS feeds
-• "analyze trends" - Run AI-powered trend analysis
-
-💡 **Data Sources**
-• We Work Remotely RSS Feeds
-• Categories: Full-Stack, Frontend, Programming, Design, DevOps
-
-Just ask naturally and I'll help you discover remote job trends!
-"""
+Just ask naturally!"""
 
         artifact = Artifact(
             name="help", parts=[MessagePart(kind="text", text=response)]
@@ -378,44 +343,44 @@ Just ask naturally and I'll help you discover remote job trends!
 
         return response, [artifact], "completed"
 
-    async def _compare_skills(self, user_text: str) -> tuple[str, List[Artifact], str]:
-        """Compare two skills using AI"""
-        words = (
-            user_text.lower()
-            .replace("compare", "")
-            .replace("vs", " ")
-            .replace("versus", " ")
-            .split()
-        )
-        potential_skills = [
-            w.strip()
-            for w in words
-            if len(w) > 2 and w not in ["and", "the", "or", "with"]
-        ]
+    async def _compare_skills(
+        self, skill1: Optional[str], skill2: Optional[str]
+    ) -> tuple[str, List[Artifact], str]:
+        """Compare two skills"""
 
-        if len(potential_skills) < 2:
+        if not skill1 or not skill2:
             return (
-                "Please specify two skills to compare (e.g., 'compare Python vs JavaScript')",
+                "Please specify two skills to compare. Example: 'compare Python vs JavaScript'",
                 [],
                 "completed",
             )
 
-        skill1, skill2 = potential_skills[0], potential_skills[1]
+        logger.info(f"Comparing {skill1} vs {skill2}")
 
         with get_db_context() as db:
             all_skills = SkillRepository.get_all_skills(db)
             skill1_data = next(
-                (s for s in all_skills if skill1.lower() in s.name.lower()), None
+                (
+                    s
+                    for s in all_skills
+                    if skill1.lower() in s.name.lower()
+                    or s.name.lower() in skill1.lower()
+                ),
+                None,
             )
             skill2_data = next(
-                (s for s in all_skills if skill2.lower() in s.name.lower()), None
+                (
+                    s
+                    for s in all_skills
+                    if skill2.lower() in s.name.lower()
+                    or s.name.lower() in skill2.lower()
+                ),
+                None,
             )
 
             market_data = {
                 "skill1_mentions": skill1_data.total_mentions if skill1_data else 0,
                 "skill2_mentions": skill2_data.total_mentions if skill2_data else 0,
-                "skill1_growth": "N/A",
-                "skill2_growth": "N/A",
             }
 
         comparison = await self.ai_service.compare_skills(skill1, skill2, market_data)
@@ -429,32 +394,37 @@ Just ask naturally and I'll help you discover remote job trends!
         return response, [artifact], "completed"
 
     async def _get_learning_path(
-        self, user_text: str
+        self, target_skill: str
     ) -> tuple[str, List[Artifact], str]:
         """Generate learning path for a skill"""
-        words = (
-            user_text.lower()
-            .replace("learn", "")
-            .replace("learning", "")
-            .replace("path", "")
-            .split()
-        )
-        target_skill = " ".join(w for w in words if len(w) > 2)[:50]
 
-        if not target_skill:
+        skill = target_skill.strip()
+        if not skill or len(skill) < 2:
             return (
-                "Please specify a skill you want to learn (e.g., 'learn React')",
+                "Please specify a skill you want to learn. Example: 'learn React' or 'create learning path for Python'",
                 [],
                 "completed",
             )
 
-        current_skills = []
+        logger.info(f"Generating learning path for: '{skill}'")
 
-        learning_path = await self.ai_service.generate_skill_learning_path(
-            target_skill=target_skill, current_skills=current_skills
+        with get_db_context() as db:
+            top_skills = [
+                s.name.lower() for s in SkillRepository.get_top_skills(db, limit=30)
+            ]
+            is_trending = any(
+                skill.lower() in ts or ts in skill.lower() for ts in top_skills
+            )
+
+        learning_path = await self.ai_service.generate_skill_learning_path(skill)
+
+        market_note = ""
+        if is_trending:
+            market_note = f"\n\n**📈 Market Insight:** {skill.title()} is currently trending in remote job listings!\n"
+
+        response = (
+            f"**Learning Path for {skill.title()}**{market_note}\n{learning_path}"
         )
-
-        response = f"**Learning Path for {target_skill.title()}**\n\n{learning_path}"
 
         artifact = Artifact(
             name="learning_path", parts=[MessagePart(kind="text", text=learning_path)]
@@ -466,6 +436,7 @@ Just ask naturally and I'll help you discover remote job trends!
         self, user_text: str, context_id: str
     ) -> tuple[str, List[Artifact], str]:
         """Answer user question using AI"""
+
         with get_db_context() as db:
             total_jobs = JobRepository.get_total_jobs(db)
             recent_jobs = JobRepository.get_jobs_count_by_period(db, hours=24 * 7)
@@ -483,18 +454,12 @@ Just ask naturally and I'll help you discover remote job trends!
                 "recent_jobs": recent_jobs,
                 "top_skills": top_skills,
                 "total_companies": total_companies,
-                "additional_context": "Data from We Work Remotely RSS feeds, updated hourly",
-                "data_sources": "Full-Stack, Frontend, Programming, Design, DevOps categories",
+                "data_sources": "We Work Remotely RSS feeds (Full-Stack, Frontend, Programming, Design, DevOps)",
             }
 
         answer = await self.ai_service.answer_question(user_text, context_data)
 
-        if not answer or answer.strip() == "":
-            answer = (
-                "I couldn't generate a response. Please try rephrasing your question."
-            )
-
-        response = f"**Answer:**\n\n{answer}"
+        response = f"{answer}"
 
         artifact = Artifact(
             name="ai_answer", parts=[MessagePart(kind="text", text=answer)]
