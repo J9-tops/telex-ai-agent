@@ -232,10 +232,17 @@ async def a2a_endpoint(request: Request):
             result = await freelance_agent.process_messages(
                 messages=messages, context_id=context_id, task_id=task_id, config=config
             )
-            logger.info(f"Agent processing completed: state={result.status.state}")
+            if messages and messages[0].messageId:
+                incoming_message_id = messages[0].messageId
+                if hasattr(result, "id"):
+                    result.id = incoming_message_id
+                if hasattr(result, "status") and hasattr(result.status, "message"):
+                    result.status.message.messageId = incoming_message_id
 
-            response = JSONRPCResponse(id=rpc_request.id, result=result)
-            return response.model_dump()
+                logger.info(f"Agent processing completed: state={result.status.state}")
+
+                response = JSONRPCResponse(id=rpc_request.id, result=result)
+                return response.model_dump()
 
     except Exception as e:
         logger.error(f"Error in A2A endpoint: {e}", exc_info=True)

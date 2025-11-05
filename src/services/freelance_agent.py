@@ -40,8 +40,8 @@ class FreelanceAgent:
     ) -> TaskResult:
         """Process incoming A2A messages and generate response"""
 
-        context_id = context_id or str(uuid4())
-        task_id = task_id or str(uuid4())
+        context_id = context_id
+        task_id = task_id
 
         user_message = messages[-1] if messages else None
         if not user_message:
