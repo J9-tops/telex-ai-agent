@@ -125,14 +125,37 @@ app.include_router(ai.router)
 
 
 def normalize_to_text(obj):
-    """Ensure all message/artifact parts have text output."""
+    """Convert all data parts to human-readable text before returning."""
+
+    def format_data(data, level=0):
+        """Recursively format dicts/lists into readable text."""
+        indent = "  " * level
+        if isinstance(data, dict):
+            lines = []
+            for key, value in data.items():
+                if isinstance(value, (dict, list)):
+                    lines.append(f"{indent}{key.capitalize()}:")
+                    lines.append(format_data(value, level + 1))
+                else:
+                    lines.append(f"{indent}{key.capitalize()}: {value}")
+            return "\n".join(lines)
+        elif isinstance(data, list):
+            lines = []
+            for item in data:
+                if isinstance(item, (dict, list)):
+                    lines.append(format_data(item, level + 1))
+                else:
+                    lines.append(f"{indent}- {item}")
+            return "\n".join(lines)
+        else:
+            return f"{indent}{data}"
+
     if hasattr(obj, "status") and hasattr(obj.status, "message"):
         parts = getattr(obj.status.message, "parts", [])
         for part in parts:
             if part.kind == "data" and part.data:
-
                 part.kind = "text"
-                part.text = json.dumps(part.data, indent=2)
+                part.text = format_data(part.data)
                 part.data = None
 
     if hasattr(obj, "artifacts"):
@@ -140,7 +163,7 @@ def normalize_to_text(obj):
             for part in artifact.parts:
                 if part.kind == "data" and part.data:
                     part.kind = "text"
-                    part.text = json.dumps(part.data, indent=2)
+                    part.text = format_data(part.data)
                     part.data = None
 
     return obj
