@@ -7,6 +7,7 @@ import os
 import logging
 import asyncio
 import httpx
+import json
 
 from src.models.a2a import JSONRPCRequest, JSONRPCResponse, A2AMessage, MessagePart
 from src.services.freelance_agent import FreelanceAgent
@@ -123,6 +124,28 @@ app.include_router(admin.router)
 app.include_router(ai.router)
 
 
+def normalize_to_text(obj):
+    """Ensure all message/artifact parts have text output."""
+    if hasattr(obj, "status") and hasattr(obj.status, "message"):
+        parts = getattr(obj.status.message, "parts", [])
+        for part in parts:
+            if part.kind == "data" and part.data:
+
+                part.kind = "text"
+                part.text = json.dumps(part.data, indent=2)
+                part.data = None
+
+    if hasattr(obj, "artifacts"):
+        for artifact in getattr(obj, "artifacts", []):
+            for part in artifact.parts:
+                if part.kind == "data" and part.data:
+                    part.kind = "text"
+                    part.text = json.dumps(part.data, indent=2)
+                    part.data = None
+
+    return obj
+
+
 @app.post("/a2a/freelance")
 async def a2a_endpoint(request: Request):
     """Main A2A endpoint for freelance trends agent"""
@@ -232,6 +255,9 @@ async def a2a_endpoint(request: Request):
             result = await freelance_agent.process_messages(
                 messages=messages, context_id=context_id, task_id=task_id, config=config
             )
+
+            result = normalize_to_text(result)
+
             if messages and messages[0].messageId:
                 incoming_message_id = messages[0].messageId
                 if hasattr(result, "id"):
