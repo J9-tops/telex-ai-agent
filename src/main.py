@@ -125,37 +125,146 @@ app.include_router(ai.router)
 
 
 def normalize_to_text(obj):
-    """Convert all data parts to human-readable text before returning."""
+    """Convert all data parts to well-formatted markdown text."""
 
-    def format_data(data, level=0):
-        """Recursively format dicts/lists into readable text."""
-        indent = "  " * level
+    def format_data_as_markdown(data, level=0):
+        """Recursively format dicts/lists into clean markdown."""
+
         if isinstance(data, dict):
             lines = []
+
+            if "skills" in data and isinstance(data["skills"], list):
+                return format_skills_list(data["skills"])
+            elif "roles" in data and isinstance(data["roles"], list):
+                return format_roles_list(data["roles"])
+            elif "jobs" in data and isinstance(data["jobs"], list):
+                return format_jobs_list(data["jobs"])
+
             for key, value in data.items():
-                if isinstance(value, (dict, list)):
-                    lines.append(f"{indent}{key.capitalize()}:")
-                    lines.append(format_data(value, level + 1))
+                formatted_key = key.replace("_", " ").title()
+
+                if isinstance(value, dict):
+                    lines.append(f"\n**{formatted_key}:**\n")
+                    lines.append(format_data_as_markdown(value, level + 1))
+                elif isinstance(value, list):
+                    lines.append(f"\n**{formatted_key}:**")
+                    lines.append(format_data_as_markdown(value, level + 1))
                 else:
-                    lines.append(f"{indent}{key.capitalize()}: {value}")
+                    lines.append(f"**{formatted_key}:** {value}")
+
             return "\n".join(lines)
+
         elif isinstance(data, list):
+            if not data:
+                return "_No items_"
+
             lines = []
-            for item in data:
-                if isinstance(item, (dict, list)):
-                    lines.append(format_data(item, level + 1))
-                else:
-                    lines.append(f"{indent}- {item}")
+            if data and isinstance(data[0], dict):
+                for i, item in enumerate(data, 1):
+                    lines.append(f"\n{i}. {format_dict_item(item)}")
+            else:
+                for item in data:
+                    lines.append(f"- {item}")
+
             return "\n".join(lines)
+
         else:
-            return f"{indent}{data}"
+            return str(data)
+
+    def format_skills_list(skills):
+        """Format trending skills list beautifully."""
+        if not skills:
+            return "_No skills data available_"
+
+        lines = ["## 📊 Trending Skills\n"]
+
+        for i, skill in enumerate(skills[:15], 1):
+            name = skill.get("skill_name", "Unknown").title()
+            current = skill.get("current_mentions", 0)
+            growth = skill.get("growth_percentage", "N/A")
+
+            if "+" in str(growth):
+                emoji = "🔥"
+            elif "-" in str(growth):
+                emoji = "📉"
+            else:
+                emoji = "📊"
+
+            lines.append(f"{i}. {emoji} **{name}**")
+            lines.append(f"   - Mentions: {current}")
+            lines.append(f"   - Growth: {growth}\n")
+
+        return "\n".join(lines)
+
+    def format_roles_list(roles):
+        """Format trending roles list beautifully."""
+        if not roles:
+            return "_No roles data available_"
+
+        lines = ["## 💼 Trending Job Roles\n"]
+
+        for i, role in enumerate(roles[:15], 1):
+            name = role.get("role_name", "Unknown")
+            count = role.get("job_count", 0)
+            skills = role.get("top_skills", [])
+
+            lines.append(f"{i}. **{name}**")
+            lines.append(f"   - Open Positions: {count}")
+            if skills:
+                skills_str = ", ".join(skills[:5])
+                lines.append(f"   - Key Skills: {skills_str}\n")
+            else:
+                lines.append("")
+
+        return "\n".join(lines)
+
+    def format_jobs_list(jobs):
+        """Format job listings beautifully."""
+        if not jobs:
+            return "_No jobs found_"
+
+        lines = [f"## 🔍 Found {len(jobs)} Jobs\n"]
+
+        for i, job in enumerate(jobs[:20], 1):
+            position = job.get("position", "Unknown Position")
+            company = job.get("company", "Unknown Company")
+            tags = job.get("tags", [])
+            url = job.get("url", "")
+
+            lines.append(f"### {i}. {position}")
+            lines.append(f"**Company:** {company}")
+
+            if tags:
+                skills_str = ", ".join(tags[:6])
+                lines.append(f"**Skills:** {skills_str}")
+
+            if url:
+                lines.append(f"**[Apply Here]({url})**")
+
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def format_dict_item(item):
+        """Format a single dict item inline."""
+        if "skill_name" in item:
+            return f"**{item['skill_name'].title()}** - {item.get('current_mentions', 0)} mentions"
+        elif "role_name" in item:
+            return f"**{item['role_name']}** - {item.get('job_count', 0)} jobs"
+        elif "position" in item:
+            company = item.get("company", "Unknown")
+            return f"**{item['position']}** at {company}"
+        else:
+
+            key_val_pairs = [f"{k}: {v}" for k, v in item.items() if v]
+            return ", ".join(key_val_pairs[:3])
 
     if hasattr(obj, "status") and hasattr(obj.status, "message"):
         parts = getattr(obj.status.message, "parts", [])
         for part in parts:
             if part.kind == "data" and part.data:
                 part.kind = "text"
-                part.text = format_data(part.data)
+                part.text = format_data_as_markdown(part.data)
                 part.data = None
 
     if hasattr(obj, "artifacts"):
@@ -163,7 +272,7 @@ def normalize_to_text(obj):
             for part in artifact.parts:
                 if part.kind == "data" and part.data:
                     part.kind = "text"
-                    part.text = format_data(part.data)
+                    part.text = format_data_as_markdown(part.data)
                     part.data = None
 
     return obj
